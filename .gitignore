@@ -1,0 +1,49 @@
+# --- Privacy: voicemails contain other people's personal data (GDPR) ---
+# Never commit audio, transcripts, results or the database.
+
+# Audio files, anywhere in the repo
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.oga
+*.opus
+*.flac
+*.aac
+*.amr
+*.wma
+*.webm
+*.3gp
+
+# Pipeline working folders: ignore contents, keep the folder (.gitkeep)
+01-voicemail-triage/inbox/*
+01-voicemail-triage/processed/*
+01-voicemail-triage/failed/*
+01-voicemail-triage/transcripts/*
+01-voicemail-triage/results/*
+!01-voicemail-triage/**/.gitkeep
+
+# Your own real recordings for the test set (synthetic scripts + labels ARE committed)
+01-voicemail-triage/testset/my_recordings/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Model caches, if ever placed in the repo
+models/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
