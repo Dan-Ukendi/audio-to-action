@@ -31,7 +31,7 @@ and are git-ignored. Keep this repo outside synced folders (OneDrive, Dropbox).
 - [x] Phase 0: Setup
 - [x] Phase 1: Test set (18 synthetic English voicemails)
 - [x] Phase 2: Transcription (`shared/transcribe.py`, results in `docs/transcription-comparison.md`)
-- [ ] Phase 3: Analysis
+- [x] Phase 3: Analysis (`shared/analyze.py`, Ollama structured output + Pydantic validation + 1 retry)
 - [ ] Phase 4: Routing
 - [ ] Phase 5: Glue & reliability
 - [ ] Phase 6: Evaluation

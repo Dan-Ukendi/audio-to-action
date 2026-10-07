@@ -278,3 +278,112 @@ Phase 3 adds the analysis step: a Pydantic `Result` schema (category, urgency, n
 summary) in `shared/schemas.py`, and `analyze(transcript) -> Result`, which asks `qwen2.5:7b` in Ollama for JSON
 in exactly that shape and checks it, with one retry if the JSON is invalid. That's also where "a 1632…",
 "double o" and "spelled S-I-O-B-H-A-N" get turned into clean answers.
+
+---
+
+## Part 1, Phase 3: Analysis (2026-10-07)
+
+### 1. What we built
+A function `analyze(transcript) -> Result` that asks the local LLM (`qwen2.5:7b` in Ollama) to read a
+transcript and fill in a fixed form: summary, reason, category, urgency (1-3), caller name, callback number,
+language. The form is a Pydantic schema; Ollama is forced to answer in exactly that JSON shape, and plain-code
+rules check the answer. If a rule fails, the model gets the error back **once** to correct itself.
+
+### 2. Where it fits in the pipeline
+```
+ audio ─► inbox/ ─► 1.transcribe ─► [2. ANALYZE] ─► 3.route ─► 4.store + move file
+                     (Phase 2)       (Phase 3)       (Phase 4)   (Phase 4-5)
+                                     <-- you are here
+           Transcript ─► prompt + schema ─► Ollama ─► JSON ─► Pydantic rules ─ok─► Result JSON
+                                               ▲                     │
+                                               └── error, 1 retry ◄──┘ fail twice ─► AnalysisError
+```
+
+### 3. How it works, step by step
+`shared/analyze.py` → `analyze(transcript, cache_dir, llm)`:
+1. `cache_path()` builds `<hash>_<whisper model>_<llm>_<PROMPT_VERSION>.json` (':' in "qwen2.5:7b" becomes
+   '-' because Windows forbids ':' in file names). If it exists, load and return it.
+2. `messages` = the `SYSTEM_PROMPT` (business context + rules for each field) and the transcript between `<<< >>>`.
+3. `ask_llm()` calls `client.chat(..., format=Analysis.model_json_schema(), options={"temperature": 0})`.
+   `format=<schema>` makes Ollama only produce tokens that fit the JSON shape; `temperature=0` makes it pick
+   the most likely answer every time, so runs are repeatable.
+4. `Analysis.model_validate_json(raw)` parses and checks the reply (`shared/schemas.py`):
+   - `category` must be one of 5 `Literal` values; `urgency` must be 1-3 (`Field(ge=1, le=3)`).
+   - `check_uk_number()`: keep digits only, then require `0` + 9-10 digits.
+   - `empty_name_is_none()`: "", "unknown" → null. `two_letter_language()`: "en-GB" → "en".
+   - `urgent_means_today()`: category urgent **if and only if** urgency 3.
+5. On `ValidationError`: `short_errors()` turns it into readable lines; we append the model's own reply and
+   "Your answer broke these rules: … do not replace a value the caller said with null" and ask again.
+   Second failure → `AnalysisError` (Phase 5 will move such files to `failed/`).
+6. A `Result` wraps the `Analysis` with bookkeeping (models, prompt version, attempts, the rejected first reply
+   and why, time) and is written to the cache via `.tmp` + rename.
+
+`01-voicemail-triage/analyze_testset.py` runs this over the 18 test files and compares with `labels.json`.
+
+### Results (small transcripts, CPU)
+| | prompt v1 | prompt v2 |
+|---|---|---|
+| urgent missed | 0/6 | 0/6 |
+| category | 12/18 | 15/18 |
+| urgency | 12/18 | 11/18 |
+| name | 11/18 | 10/18 |
+| number | 15/18 | 16/18 |
+| false "urgent" | 0 | 1 (12, scam) |
+
+v1 → v2 changes: "sales = selling TO Brightwater" (v1 put quotes/bookings in sales), retry message "fix, don't
+delete" (v1's retry on 09 replaced a number missing its 0 by null), "a name after 'Hi' is usually who is being
+called", and the example "Rachel from Acme → Rachel". Side effects: names shortened to first names (caused by
+that example), and scam 12 became urgent because its "deadline today" matched the urgent definition.
+
+### 4. Key concepts I should understand
+- **Structured output:** the schema goes *into* the request, so the model can't answer in prose. Example: it
+  cannot reply "This seems urgent!"; it must produce `{"summary": …, "category": "urgent", …}`.
+- **Validation = plain-code rules on model output:** the model proposes, code checks. Example: "1632960222"
+  is rejected by `check_uk_number()` no matter how confident the model is.
+- **Retry with feedback, and its risk:** at temperature 0, asking again without new info gives the same
+  answer, so the retry includes the error. But the easiest way to satisfy a rule is to delete the value:
+  v1 turned a fixable number into null. Rules + feedback must say what a *good* fix looks like.
+- **Field order is a thinking order:** `summary` and `reason` come before `category`, so the model writes
+  its justification first and then commits.
+- **Prompts are code without tests:** one example sentence ("Rachel from Acme → Rachel") fixed one file and
+  shortened three other names. Every prompt change needs the whole test set re-run, hence `PROMPT_VERSION`
+  in the cache key.
+
+### 5. Files created or changed
+- `shared/analyze.py`: prompt, Ollama call, validation + one retry, cache, command-line demo.
+- `shared/schemas.py`: added `Category`, `Analysis` (with validators) and `Result`.
+- `01-voicemail-triage/analyze_testset.py`: runs analysis on the test set and compares with labels.
+- `.gitignore`: added `testset/results/`.
+- `PROJECT_RULES.md`, `README.md`: status updated.
+
+### 6. Try it yourself
+In a new terminal (ffmpeg on PATH), with Ollama running:
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python 01-voicemail-triage\analyze_testset.py
+python -m shared.analyze 01-voicemail-triage\testset\audio\06_urgent_landlord_deadline.ogg --transcripts 01-voicemail-triage\testset\transcripts --results 01-voicemail-triage\testset\results
+```
+Expected: the first prints one line per file and ends with `category 15/18 urgency 11/18 name 10/18
+number 16/18`, `urgent voicemails missed: 0 []`, in seconds because everything is cached. The second prints
+the transcript and a JSON result with `"category": "urgent"` and `"callback_number": "01632960789"`.
+To see a retry, open `testset\results\*_v2.json` files with `"attempts": 2` and read `rejected_because`.
+
+### 7. What can go wrong
+- **Slow (1-2 min per voicemail):** Ollama runs on CPU because the RTX 5050 shows Code 43 in Device Manager.
+  Updating the NVIDIA driver should bring it to a few seconds.
+- **"Ollama not reachable":** the Ollama app isn't running.
+- **Urgent-sounding scams:** "suspended today, final notice" matches the urgent definition (file 12 in v2).
+- **The LLM can't fix what Whisper misheard:** "Carver", "Colleen" (from "calling"), "0770090618".
+- **Retry that deletes data:** the model may "fix" a rule violation by returning null.
+- **Over-tuning on 18 files:** each prompt tweak can just memorize the test set. Phase 6 needs held-out data.
+
+### 8. Check my understanding
+1. Ollama already forces the JSON shape with `format=<schema>`. Why do we still validate with Pydantic afterwards?
+2. Why would retrying with exactly the same messages be pointless at `temperature=0`?
+3. In v1, file 09 ended with `callback_number: null` after a retry. Which is worse for Sam: a number missing its first 0, or no number at all? How did v2 change the outcome?
+
+### 9. Next phase preview
+Phase 4 adds routing in plain code: rules like "urgent → ntfy notification now", "spam → archive",
+"missing number or name → review queue". Every result is stored in SQLite. The model doesn't decide
+any of this; `if` statements do, and you'll be able to read every rule.

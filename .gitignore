@@ -28,6 +28,7 @@
 01-voicemail-triage/testset/audio/
 01-voicemail-triage/testset/voices/
 01-voicemail-triage/testset/transcripts/
+01-voicemail-triage/testset/results/
 *.onnx
 # Your own real recordings: real people's data, never committed
 01-voicemail-triage/testset/my_recordings/
