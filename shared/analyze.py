@@ -28,12 +28,12 @@ from shared.schemas import Analysis, Result, Transcript
 
 load_dotenv()
 
-# Change this whenever SYSTEM_PROMPT or the retry message changes.
-# v1 -> v2: 'sales' means selling TO the business (v1 put customer requests in sales);
-# retry says fix, don't delete; a name right after "Hi" is usually who is being called.
-PROMPT_VERSION = "v2"
-
-SYSTEM_PROMPT = """\
+# Prompt versions. The version is part of the cache key, so a changed prompt never reuses
+# old answers. Never edit a version in place: add a new one.
+# v1 (not kept): first attempt; put customer requests in 'sales', retry could delete values.
+# v2: 'sales' = selling TO the business; retry says fix, don't delete; greeting name = callee.
+# v3: Phase 6 experiment, ONE change: the company-caller example keeps the full name.
+PROMPT_V2 = """\
 You triage voicemails for Brightwater Plumbing & Heating, a small UK plumbing and heating business.
 The owner is Sam. The transcript was made by speech recognition, so it may contain mistakes.
 Answer with JSON only, in the requested format.
@@ -70,6 +70,14 @@ CALLBACK NUMBER:
 - null if no number is spoken (for example "you've got my number"). Never guess.
 """
 
+V2_EXAMPLE = '"this is Rachel from Acme" -> "Rachel".'
+V3_EXAMPLE = '"this is Rachel Moore from Acme" -> "Rachel Moore". Keep the full name when one is given.'
+assert V2_EXAMPLE in PROMPT_V2  # the experiment must change exactly this one line
+PROMPTS = {"v2": PROMPT_V2, "v3": PROMPT_V2.replace(V2_EXAMPLE, V3_EXAMPLE)}
+
+# Which prompt the pipeline uses by default (Phase 6 decides: see docs/eval-results.md).
+DEFAULT_PROMPT_VERSION = os.getenv("ANALYSIS_PROMPT", "v2")
+
 
 class AnalysisError(Exception):
     """The model gave an invalid answer twice. Carries both raw replies for inspection."""
@@ -82,10 +90,10 @@ def settings() -> dict:
     }
 
 
-def cache_path(cache_dir: Path, transcript: Transcript, llm: str) -> Path:
+def cache_path(cache_dir: Path, transcript: Transcript, llm: str, prompt_version: str) -> Path:
     # ':' is not allowed in Windows file names ("qwen2.5:7b"), so swap it.
     safe_llm = llm.replace(":", "-")
-    return cache_dir / f"{transcript.audio_sha256[:16]}_{transcript.model}_{safe_llm}_{PROMPT_VERSION}.json"
+    return cache_dir / f"{transcript.audio_sha256[:16]}_{transcript.model}_{safe_llm}_{prompt_version}.json"
 
 
 def short_errors(error: ValidationError) -> str:
@@ -108,18 +116,20 @@ def ask_llm(client: ollama.Client, llm: str, messages: list[dict]) -> str:
     return response.message.content
 
 
-def analyze(transcript: Transcript, cache_dir: str | Path | None = None, llm: str | None = None) -> Result:
+def analyze(transcript: Transcript, cache_dir: str | Path | None = None, llm: str | None = None,
+            prompt_version: str | None = None) -> Result:
     """Analyze one transcript. With cache_dir, a transcript already analyzed is returned from disk."""
     cfg = settings()
     llm = llm or cfg["model"]
+    prompt_version = prompt_version or DEFAULT_PROMPT_VERSION
 
-    cached = cache_path(Path(cache_dir), transcript, llm) if cache_dir else None
+    cached = cache_path(Path(cache_dir), transcript, llm, prompt_version) if cache_dir else None
     if cached and cached.exists():
         return Result.model_validate_json(cached.read_text(encoding="utf-8"))
 
     client = ollama.Client(host=cfg["host"])
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": PROMPTS[prompt_version]},
         {"role": "user", "content": f"Voicemail transcript:\n<<<\n{transcript.text}\n>>>"},
     ]
 
@@ -155,7 +165,7 @@ def analyze(transcript: Transcript, cache_dir: str | Path | None = None, llm: st
         audio_sha256=transcript.audio_sha256,
         transcript_model=transcript.model,
         llm_model=llm,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=prompt_version,
         attempts=attempt,
         rejected_reply=replies[0] if attempt == 2 else None,
         rejected_because=rejected_because,

@@ -598,3 +598,104 @@ afterwards for a clean start. Then try `python 01-voicemail-triage\run.py --watc
 Phase 6 is evaluation: an eval script that runs the steps over the whole test set and computes metrics
 (category accuracy, urgent false-negative rate, name/number accuracy), writes `docs/eval-results.md`,
 and runs one single-variable experiment (candidate: the "Rachel from Acme" example that shortened names).
+
+---
+
+## Part 1, Phase 6: Evaluation (2026-10-07)
+
+### 1. What we built
+A measuring tool. `evaluate.py` runs every labelled voicemail through transcribe → analyze → route and
+compares the output with the answer key, producing one table of numbers per configuration (Whisper model
++ prompt version) plus a confusion matrix and a list of every single error, saved in `docs/eval-results.md`.
+Then we ran one controlled experiment: change one line of the prompt, keep everything else the same, and
+decide with a rule written down *before* seeing the result.
+
+### 2. Where it fits in the pipeline
+```
+ audio ─► 1.transcribe ─► 2.analyze ─► 3.route            (the real pipeline, unchanged)
+              │               │            │
+              ▼               ▼            ▼
+ ┌──────────────────────────────────────────────────────┐
+ │ [Phase 6: EVALUATE]  compare with testset/labels.json │ <-- you are here
+ │ metrics per config → docs/eval-results.md             │
+ └──────────────────────────────────────────────────────┘
+```
+
+### 3. How it works, step by step
+`01-voicemail-triage/evaluate.py` → `main()`:
+1. `load_labels()`: `testset/labels.json` + `testset/my_recordings/labels.json` if you add real recordings.
+2. For each config `whisper:prompt` (e.g. `small:v2`), `run_config()` calls `transcribe()`, then
+   `analyze(..., prompt_version=prompt)`, then the pure `route()` for every file. Cached, so a known config is instant.
+3. `metrics()` computes, using `shared/evaluation.py`:
+   urgent false negatives, urgent archived, false urgent, category / urgency accuracy, name exact
+   (`same_value`) and first word (`same_first_word`), numbers as correct / wrong / missed / invented
+   (`null_aware`), pushes, review flags, retries, LLM time.
+4. `build_report()` writes the metrics table, the hand-written conclusions from `docs/eval-notes.md`,
+   and per config a confusion matrix (`confusion()`) and every error (`errors_table()`).
+
+`shared/analyze.py` now holds `PROMPTS = {"v2": ..., "v3": ...}`, where v3 is built as
+`PROMPT_V2.replace(V2_EXAMPLE, V3_EXAMPLE)` with an `assert`, so the code itself guarantees exactly one
+line differs. `ANALYSIS_PROMPT` in `.env` picks the default (v2).
+
+### Results
+| metric | small:v2 | small:v3 |
+|---|---|---|
+| urgent false negatives | 0/6 | 0/6 |
+| urgent archived | 0 | 0 |
+| category accuracy | 15/18 (83 %) | 15/18 (83 %) |
+| urgency accuracy | 11/18 | 10/18 |
+| name exact / first word | 10/18 / 14/18 | 10/18 / 12/18 |
+| number correct (wrong / missed / invented) | 16/18 (2/0/0) | 16/18 (2/0/0) |
+
+Experiment: v3 brought surnames back (Laura Jenkins, Brenda Walsh) but broke two unrelated answers (Mum → null,
+"Yak" invented) → exact names unchanged → rule not met → **v2 stays**.
+Definition of done: no urgent archived ✔, re-run does nothing ✔, **90 % category ✘ (83 %)**.
+
+### 4. Key concepts I should understand
+- **Metrics that match the cost of mistakes:** "urgent false negatives" is listed first because missing a gas
+  leak is the expensive error. Example: 0/6 here matters more than the 83 % overall accuracy.
+- **Confusion matrix:** rows = truth, columns = prediction, so you see *which* mistakes happen. Example:
+  the spam row has a 1 under "urgent": scam 12, not a random error.
+- **Single-variable experiment:** change one thing, so any difference has one cause. Example: v3 differs from
+  v2 in one line, enforced by an `assert` in the code.
+- **Pre-registered decision rule:** decide what "better" means before looking. Example: v3 improved surnames,
+  and it would be tempting to call that a win, but the rule said exact names must go up, and they didn't (10 → 10).
+- **Small samples are noisy:** with 18 files, one sentence moved answers on unrelated files (Mum, Yak). Example:
+  a ±2 difference can't be distinguished from that noise; more data is the fix, not more tweaking.
+
+### 5. Files created or changed
+- `01-voicemail-triage/evaluate.py`: the evaluation (configs, metrics, report).
+- `shared/evaluation.py`: reusable scoring helpers.
+- `shared/analyze.py`: `PROMPTS` dict (v2, v3), `prompt_version` parameter, `ANALYSIS_PROMPT` default.
+- `docs/eval-results.md` (generated) and `docs/eval-notes.md` (hand-written conclusions, inserted into it).
+- `01-voicemail-triage/analyze_testset.py`: removed (replaced by `evaluate.py`).
+- `.env.example` / `.env`: `ANALYSIS_PROMPT=v2`. `PROJECT_RULES.md`: status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python 01-voicemail-triage\evaluate.py --configs small:v2 small:v3
+python 01-voicemail-triage\evaluate.py --configs large-v3-turbo:v2 --no-write
+```
+Expected: the first prints the metrics table above in ~2 s (all cached) and rewrites `docs\eval-results.md`.
+The second is the next experiment (turbo transcripts are cached from Phase 2, but the analysis isn't): 18 LLM
+calls, about 30-60 min on CPU; `--no-write` keeps the saved report unchanged.
+
+### 7. What can go wrong
+- **Overfitting the test set:** every tweak judged on the same 18 files makes the numbers look better than
+  reality. Hold some data back.
+- **Label mistakes look like model mistakes:** 08 (friend's football: personal or other?) is arguably a label question.
+- **Synthetic audio is too clean:** real voicemails will score lower; add `my_recordings/` to find out by how much.
+- **Windows console encoding:** printing "≥" crashed on cp1252; fixed with `sys.stdout.reconfigure(encoding="utf-8")`
+  and by saving the report before printing.
+- **Slow experiments on CPU:** a new prompt version = 18 LLM calls = 25-60 min until the GPU works.
+
+### 8. Check my understanding
+1. Why is "urgent false negatives" more important than "category accuracy" for this project?
+2. v3 got more full surnames right. Why did we still keep v2?
+3. Why does the `assert V2_EXAMPLE in PROMPT_V2` line matter for the experiment?
+
+### 9. Next phase preview
+Phase 7 is polish: a daily digest (callbacks, review items, failed files) with a counts-only push, a full
+README with the architecture and results, a summary of what `shared/` gives Part 2, and a technical handover report.
