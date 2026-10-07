@@ -48,7 +48,7 @@ Keep it clear and friendly rather than long.
 ## Phases (Part 1)
 0. Setup (done)
 1. Build the test set (done: 18 English synthetic voicemails, en_GB-vctk-medium, UK fictional numbers; user chose English only)
-2. Transcription step: `transcribe(path) -> Transcript` in `shared/`, ffmpeg conversion, hash-keyed cache, compare 2 model sizes
+2. Transcription step (done: `shared/transcribe.py`, CPU int8, 8 threads; small vs large-v3-turbo compared in `docs/transcription-comparison.md`; user kept `small` as default for speed. Known: "oh" often transcribed as "a", numbers sometimes as words, so Phase 3 must normalize numbers and prefer spelled-out names)
 3. Analysis step: Pydantic schema in `shared/`, `analyze(transcript) -> Result` via Ollama structured output, 1 retry
 4. Routing step: plain-code rules, ntfy, SQLite
 5. Glue & reliability: `run.py`, idempotency by hash, retries with backoff, `failed/`, per-step logging

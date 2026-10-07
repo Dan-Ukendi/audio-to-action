@@ -15,7 +15,7 @@ Python 3.13 · ffmpeg · faster-whisper · Ollama (`qwen2.5:7b`) · Pydantic · 
 
 ## Setup (Windows / PowerShell)
 ```powershell
-py -V:3.13 -m venv .venv
+py -V:3.13-64 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
@@ -30,7 +30,7 @@ and are git-ignored. Keep this repo outside synced folders (OneDrive, Dropbox).
 ## Status
 - [x] Phase 0: Setup
 - [x] Phase 1: Test set (18 synthetic English voicemails)
-- [ ] Phase 2: Transcription
+- [x] Phase 2: Transcription (`shared/transcribe.py`, results in `docs/transcription-comparison.md`)
 - [ ] Phase 3: Analysis
 - [ ] Phase 4: Routing
 - [ ] Phase 5: Glue & reliability

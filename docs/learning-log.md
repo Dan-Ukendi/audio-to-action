@@ -174,3 +174,107 @@ Phase 2 writes `transcribe(path) -> Transcript` in `shared/`: ffmpeg converts an
 faster-whisper turns it into text with timestamped segments, and results are cached by file hash.
 We'll run all 18 files, put transcripts next to the scripts, and compare `small` with a bigger model
 on accuracy (especially numbers and names) and speed.
+
+---
+
+## Part 1, Phase 2: Transcription (2026-10-07)
+
+### 1. What we built
+A reusable function `transcribe(path) -> Transcript` that turns any voicemail file (wav, mp3, m4a, ogg)
+into text with timestamps, plus a script that ran both `small` and `large-v3-turbo` over the 18 test files
+and compared them. The result is saved as JSON, and a file that was already transcribed is never done twice.
+Decision: `small` stays the default (about 3x faster); turbo is more accurate.
+
+### 2. Where it fits in the pipeline
+```
+ audio ─► inbox/ ─► [1. TRANSCRIBE] ─► 2.analyze ─► 3.route ─► 4.store + move file
+                     (Phase 2)          (Phase 3)    (Phase 4)   (Phase 4-5)
+                     <-- you are here
+                     any format ─ffmpeg─► 16 kHz wav ─Whisper─► Transcript JSON
+                                                                (cached by file hash)
+```
+
+### 3. How it works, step by step
+`shared/transcribe.py` → `transcribe(path, cache_dir, model)`:
+1. `settings()` reads `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, `WHISPER_CPU_THREADS` from `.env`.
+2. `file_sha256(path)` reads the file's bytes in 1 MB chunks and computes a SHA-256 fingerprint
+   (64 hex characters). Same bytes = same fingerprint, whatever the file is called.
+3. `cache_path()` builds `<cache_dir>/<first 16 chars of hash>_<model>.json`. If that file exists, we
+   load it with `Transcript.model_validate_json(...)` and return. **Nothing else runs.**
+4. `load_model()` loads Whisper. It's decorated with `@lru_cache`, so the second call with the same
+   arguments returns the already-loaded model instead of loading it again (loading takes 4-8 s).
+5. `to_wav_16k()` runs `ffmpeg -i <input> -ac 1 -ar 16000 -c:a pcm_s16le <tmp>.wav`: mono, 16 000 samples
+   per second, plain 16-bit numbers. That's the exact format Whisper was trained on. The wav goes into a
+   `TemporaryDirectory`, which Python deletes when the `with` block ends (so no extra copy of private audio stays around).
+6. `read_wav_samples()` turns the wav into a numpy array of floats between -1 and 1 (each 16-bit sample
+   divided by 32768). We give Whisper these numbers instead of a file path, which sidesteps a bug between
+   faster-whisper 1.2.1 and PyAV 19 (`metadata_errors` error).
+7. `whisper.transcribe(samples, beam_size=5, vad_filter=True)` returns a *lazy* iterator: no work happens
+   until the list comprehension loops over it. Each item becomes a `Segment` (start, end, text, confidence).
+8. A `Transcript` (defined in `shared/schemas.py`) is built and written to the cache: first to `.tmp`,
+   then renamed, so a crash never leaves a half-written JSON behind.
+
+`01-voicemail-triage/compare_models.py` → `main()`: for each model, `evaluate()` calls `transcribe()` on
+every labelled file, then `name_found()` and `number_found()` compare against `labels.json`.
+`build_report()` writes `docs/transcription-comparison.md`.
+
+### 4. Key concepts I should understand
+- **Content hash as cache key:** the cache doesn't care about file names. Example: copy
+  `06_urgent_landlord_deadline.ogg` to `test.ogg` and transcribe it: it returns instantly, because the bytes,
+  and so the hash, are identical. Change one byte and it's a "new" file. Phase 5 uses the same idea for
+  "re-running on the same file does nothing".
+- **Model name in the key:** `small` and `large-v3-turbo` produce different text for the same audio, so
+  each gets its own cache file (`364ca7..._small.json` vs `364ca7..._large-v3-turbo.json`).
+- **Normalize the input once:** four formats in, one format out of ffmpeg. Whisper (and any later
+  step) only ever has to deal with 16 kHz mono wav. A broken file fails *here*, with ffmpeg's message.
+- **Speed vs accuracy:** real-time factor (RTF) = processing time / audio length. `small` ran at 1.7
+  (a 30 s voicemail takes ~50 s), turbo at 5.7 (~3 min). Bigger model, fewer mistakes, more waiting.
+- **Transcription errors are not all equal:** "Carver" for "Carter" is annoying; "07700**94**0349"
+  for "07700900349" (small, file 18) sends Sam to a stranger. The second kind is what we must catch.
+
+### 5. Files created or changed
+- `shared/__init__.py`: makes `shared` an importable package.
+- `shared/schemas.py`: `Segment` and `Transcript` Pydantic models.
+- `shared/transcribe.py`: the transcription step + a small command-line entry point.
+- `01-voicemail-triage/compare_models.py`: runs models over the test set and writes the report.
+- `docs/transcription-comparison.md`: the results (synthetic data only).
+- `.env.example` (+ your local `.env`): added `WHISPER_CPU_THREADS=8`.
+- `.gitignore`: added `testset/transcripts/`.
+- `requirements.txt`: added `numpy`.
+- `PROJECT_RULES.md`, `README.md`: status updated.
+
+### 6. Try it yourself
+Open a **new** terminal first (so ffmpeg is on PATH), then:
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python -m shared.transcribe 01-voicemail-triage\testset\audio\06_urgent_landlord_deadline.ogg --cache-dir 01-voicemail-triage\testset\transcripts
+python -m shared.transcribe 01-voicemail-triage\testset\audio\18_other_number_corrected.wav --cache-dir 01-voicemail-triage\testset\transcripts --model large-v3-turbo
+python 01-voicemail-triage\compare_models.py
+```
+Expected: each command prints the file name, model, `audio=…s transcribe=…s this call=0.1s` (cached:
+`transcribe` is the original time, `this call` is how long it took now) and the timestamped segments.
+The last command finishes in seconds (all cached) with `small names 9/14 numbers 8/13` and
+`large-v3-turbo names 11/14 numbers 11/13`. Delete `testset\transcripts\` to force a fresh (slow) run.
+
+### 7. What can go wrong
+- **"ffmpeg not found on PATH":** the terminal was opened before ffmpeg was installed. Open a new one.
+- **Very slow transcription:** other heavy work on the laptop (a download, a build, many browser tabs).
+  The first run of file 06 took 86 s during the model download; on a quiet machine, ~20 s.
+- **"oh" written as "a":** "a 1632-960-789" loses the leading zero. Whisper's English model hears "oh"
+  as a word. Phase 3 must repair this, not this step.
+- **Numbers written as words:** turbo once wrote "oh seven seven double o nine hundred…". Correct, but
+  any code that only looks for digits misses it.
+- **Stale cache:** if you change Whisper settings (beam size, VAD) but not the model name, the cache still
+  returns old results. Delete the cache folder after changing settings.
+
+### 8. Check my understanding
+1. You rename `05_urgent_noisy_water_heater.wav` to `voicemail.wav` and transcribe it again with the same model. Is Whisper run again? Which function decides that, and why?
+2. Why does the cache file name contain the model name as well as the hash?
+3. In file 18, `small` wrote "07700940349". Is that a problem for the transcription step to fix, the analysis step, or neither? What could a later step do about a number it isn't sure of?
+
+### 9. Next phase preview
+Phase 3 adds the analysis step: a Pydantic `Result` schema (category, urgency, name, callback number,
+summary) in `shared/schemas.py`, and `analyze(transcript) -> Result`, which asks `qwen2.5:7b` in Ollama for JSON
+in exactly that shape and checks it, with one retry if the JSON is invalid. That's also where "a 1632…",
+"double o" and "spelled S-I-O-B-H-A-N" get turned into clean answers.

@@ -27,6 +27,7 @@
 # generated audio and the downloaded TTS voice are not (regenerate with generate.py).
 01-voicemail-triage/testset/audio/
 01-voicemail-triage/testset/voices/
+01-voicemail-triage/testset/transcripts/
 *.onnx
 # Your own real recordings: real people's data, never committed
 01-voicemail-triage/testset/my_recordings/
