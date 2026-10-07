@@ -53,7 +53,7 @@ Keep it clear and friendly rather than long.
 4. Routing step (done: `routing.py` pure `route()` + safety-word net + review flags, `deliver.py`, `store.py` SQLite, `shared/notify.py`. User chose: minimal push text (no caller data), sales -> archive, ntfy dry run (`NTFY_DRY_RUN=1`) until a real random topic is set. Tests: `python -m pytest 01-voicemail-triage/tests`)
 5. Glue & reliability (done: `run.py` [--watch, --retry-failed, --base], skip if hash in SQLite, `shared/retry.py` retries only transient errors 2 s/4 s, push-before-save = at-least-once, `failed/` + `.error.txt`, `logs/run.log`. Tested end-to-end in a scratch folder)
 6. Evaluation (done: `evaluate.py` + `shared/evaluation.py`, `docs/eval-results.md` generated, conclusions in `docs/eval-notes.md`. small:v2 = category 15/18, urgent FN 0/6, names 10/18, numbers 16/18. Experiment v2->v3 (name example only) failed its pre-set rule: v2 stays. DoD 90% category NOT met; next: held-out data, turbo transcripts)
-7. Polish: daily digest, full README, summary of what `shared/` reuses in Part 2
+7. Polish (done: `digest.py` daily page + counts-only push, full README with architecture/results/Task Scheduler commands, `docs/shared-for-part2.md`, `docs/HANDOVER.md` technical report). Part 1 complete; Part 2 not started
 
 ## Definition of done (Part 1)
 - ≥ 90% category accuracy on the test set.

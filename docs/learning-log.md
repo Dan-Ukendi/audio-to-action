@@ -699,3 +699,87 @@ calls, about 30-60 min on CPU; `--no-write` keeps the saved report unchanged.
 ### 9. Next phase preview
 Phase 7 is polish: a daily digest (callbacks, review items, failed files) with a counts-only push, a full
 README with the architecture and results, a summary of what `shared/` gives Part 2, and a technical handover report.
+
+---
+
+## Part 1, Phase 7: Polish (2026-10-07)
+
+### 1. What we built
+The finishing touches that make Part 1 usable day to day and understandable by someone else: a daily
+digest (one page with who to call back, what needs review and what failed, plus an optional counts-only
+push), a complete README (architecture, setup, usage, configuration, results, privacy, how to automate it
+with Task Scheduler), a guide to what Part 2 can reuse from `shared/`, and a technical handover report.
+
+### 2. Where it fits in the pipeline
+```
+ inbox/ ─► run.py: transcribe ─► analyze ─► route ─► deliver ─► processed/ | failed/
+                                                        │
+                                                        ▼
+                                                  voicemails.db ─► [digest.py] ─► digests/<date>.md
+                                                                   <-- you are here   (+ counts-only push)
+```
+
+### 3. How it works, step by step
+`01-voicemail-triage/digest.py` → `main()`:
+1. `recent_rows(conn, hours)`: rows with `processed_at >= now - hours`. `processed_at` is ISO text in UTC,
+   so comparing strings compares times correctly. Sorted urgent → inbox → personal → archive.
+2. `failed_files(failed/)`: every audio file still in `failed/` and the step from its `.error.txt`.
+3. `build()`: a Markdown page with one section per route; each line is
+   `name, number: summary` plus the review reasons when flagged (`line()`).
+4. Saves `digests/<date>.md` (git-ignored: it has names and numbers) and prints it.
+5. `--push`: `send_push("Voicemail digest", "2 to call back, 1 to review, 0 failed.")`: counts only.
+
+### 4. Key concepts I should understand
+- **A pipeline needs a "what happened" view:** files in `failed/` are silent otherwise. Example: the digest's
+  "Failed, needs attention" section is how `broken.mp3` gets noticed.
+- **Same privacy rule everywhere:** the detailed page stays local; anything that leaves the machine carries
+  counts only. Example: the digest push says "1 failed", not which caller.
+- **Documentation for different readers:** README = how to use it, learning log = how to understand it,
+  HANDOVER = how to change it. Example: another agent should start with `docs/HANDOVER.md`.
+- **Scheduling outside the code:** Task Scheduler runs `run.py --watch` at logon and `digest.py --push` daily;
+  the code itself stays simple (no built-in scheduler).
+
+### 5. Files created or changed
+- `01-voicemail-triage/digest.py`: the daily digest.
+- `README.md`: rewritten (architecture, usage, config, results, privacy, docs).
+- `docs/shared-for-part2.md`: what Part 2 reuses and what it must change.
+- `docs/HANDOVER.md`: full technical report for another developer or agent.
+- `.gitignore`: `01-voicemail-triage/digests/`. `PROJECT_RULES.md`: status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python 01-voicemail-triage\digest.py --hours 168 --push
+```
+Expected: a `[ntfy dry run] … 'N to call back, N to review, N failed.'` line, then the page with sections
+"Urgent", "Call back", "Personal", "Archived", "Failed", and `Saved: …\digests\<date>.md`. If you haven't run
+the pipeline on real files yet, the sections are empty: process a test file with `run.py` first.
+
+### 7. What can go wrong
+- **Empty digest:** the time window (`--hours`) is based on processing time, not on when the call came in.
+- **Task Scheduler runs without your terminal's PATH:** if ffmpeg isn't found in scheduled runs, add its folder
+  to the *system* PATH or call the task through a small `.cmd` that sets PATH first.
+- **Laptop asleep at 18:00:** the scheduled digest doesn't run; tick "run as soon as possible after a missed start".
+
+### 8. Check my understanding
+1. Why does the digest page stay on the laptop while the digest push may go through ntfy.sh?
+2. Which file would you give to someone who wants to *use* the system, to *learn* from it, or to *change* it?
+3. The definition of done says ≥ 90 % category accuracy, and we got 83 %. What would you try first, and why not another prompt tweak?
+
+### 9. Next phase preview
+Part 1 is complete. Part 2 (`02-meeting-action-agent/`) turns meeting recordings into action items. It reuses
+`shared/transcribe.py`, `retry.py`, `notify.py` and `evaluation.py` as they are, and the analysis *pattern*
+with a new schema; long recordings will need the GPU or chunking (see `docs/shared-for-part2.md`). It is also
+the first place where a small agent part is allowed, so deciding what stays workflow will be the main design question.
+
+---
+
+## Part 1 summary
+| Step | Code | Workflow or agent? | Why |
+|---|---|---|---|
+| Transcribe | `shared/transcribe.py` | workflow | always the same conversion; no decision to make |
+| Analyze | `shared/analyze.py` | workflow step that *uses* an LLM | the LLM fills a fixed form; code validates it; it never picks the next step |
+| Route | `routing.py` | workflow | business rules as `if` statements: testable, explainable, same input → same output |
+| Deliver / store | `deliver.py`, `store.py` | workflow | side effects in a fixed order (push before save, at-least-once) |
+| Glue | `run.py` | workflow | fixed sequence, retries and failure handling in plain code |
