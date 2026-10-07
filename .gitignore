@@ -30,6 +30,7 @@
 02-meeting-action-agent/transcripts/*
 02-meeting-action-agent/results/*
 02-meeting-action-agent/logs/
+02-meeting-action-agent/traces/
 02-meeting-action-agent/testset/audio/
 02-meeting-action-agent/testset/transcripts/
 02-meeting-action-agent/testset/results/

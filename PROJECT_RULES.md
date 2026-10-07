@@ -106,7 +106,12 @@ and every tracker change recorded with its reason (reversible).
    Story: chat-history version replayed failing calls and guessed ids (0/5); optional task_id got omitted;
    'I5' was linked to task '#5'; temperature-0 fixed point in the state loop. KEY FINDING from the reviewer:
    a plain-code rules sync (no LLM) gets 14/14 on gold -> Phase 6 must compare agent vs rules on realistic wording)
-5. Glue & reliability: `run.py` for meetings (idempotent by hash, retries, `failed/`, logs)
+5. Glue & reliability (done: `02-meeting-action-agent/run.py` [--watch, --retry-failed, --sync, --base], oldest meeting
+   first (date from YYYY-MM-DD in the name, else mtime), idempotent by hash via tracker `meetings` table, sync wrapped in
+   `sync_with_rollback` (starts by undoing leftovers of an interrupted run; any error incl. Ctrl+C undoes the
+   meeting's changes), same-named recordings get `stem_<hash8>` ids, `shared/pipeline.py` helpers (rename-based
+   move_to, error notes, logging). E2E in a scratch folder passed; review fixed double-apply after a crash, same-name
+   wipe, bad-date crash, Windows open-file copy. TODO Phase 7: Part 1 run.py has the same shutil.move bug.)
 6. Evaluation: item precision/recall, owner/due accuracy, tracker-state accuracy after the series,
    experiment: workflow-only rules vs agent for the sync
 7. Polish: README, learning log, handover update

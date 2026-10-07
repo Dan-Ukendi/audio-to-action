@@ -1240,7 +1240,7 @@ items both are capped by extraction (perfect links would give only 7/14). Phase 
 - `02-meeting-action-agent/tracker.py`: tasks + changes tables, search, similarity, add/update/undo.
 - `02-meeting-action-agent/agent.py`: tools, guards, state message, loop, trace.
 - `02-meeting-action-agent/sync_testset.py`: series runner + tracker scoring (gold / extracted).
-- `02-meeting-action-agent/tests/test_agent.py`: 17 guard tests (no LLM).
+- `02-meeting-action-agent/tests/test_agent.py`: 16 guard tests (no LLM).
 - `.gitignore`: `testset/traces_*/`. `PROJECT_RULES.md`: Phase 4 status.
 
 ### 6. Try it yourself
@@ -1269,3 +1269,100 @@ after ~3 min (one LLM call); the trace shows each tool call, its arguments, the 
 ### 9. Next phase preview
 Phase 5 glues Part 2 into `run.py` like Part 1: watch `inbox/`, transcribe with the name hint, extract, sync (agent or
 rules), move files, skip meetings already processed, retry Ollama hiccups, failed files to `failed/`, logs.
+
+---
+
+## Part 2, Phase 5: Glue & reliability (2026-10-08)
+
+### 1. What we built
+`02-meeting-action-agent/run.py`: drop meeting recordings into `inbox/` and each one is transcribed (with the name
+hint), its action items extracted, and the tracker synced by the agent, oldest meeting first. A recording already
+processed is skipped. If anything fails, the file goes to `failed/` with a note, and, new compared with Part 1,
+**the tracker is rolled back** so a meeting is never half-applied.
+
+### 2. Where it fits in the pipeline
+```
+ inbox/ ─► sort by meeting date ─► hash in tracker.meetings? ─yes─► processed/ (nothing else)
+                                       │no
+                                       ▼
+          transcribe (+hint) ─► extract (retries) ─► sync_with_rollback(agent) ─► record_meeting ─► processed/
+                                                       │ undo leftovers first;            │
+                                                       │ any error/Ctrl+C: undo meeting   │
+                                                       └──────────── failed/ + .error.txt ◄┘
+```
+
+### 3. How it works, step by step
+`run.py` → `run_once()` sorts ready files by `(date_for_sorting, name)`: meeting 3 refers to tasks from 1 and 2.
+`process_file()`:
+1. `file_sha256()` → `tracker.meeting_done()`: already processed → move, done.
+2. `meeting_id()`: the file name without extension, or `name_<hash8>` if another recording already used it.
+   `meeting_date()`: `YYYY-MM-DD` in the name, else the file's modified date (impossible dates → that file fails).
+3. `transcribe(..., hint=context.whisper_hint())` → `with_retries(extract, ...)` (both cached).
+4. `with_retries(sync_with_rollback, agent_sync, ...)`: `start_clean()` first undoes changes left by an interrupted run
+   of this meeting; then the agent runs; on *any* exception (Ctrl+C too) `tracker.undo_meeting()` reverses this
+   meeting's changes from the change log, newest first, and the error is re-raised (temporary ones are retried).
+5. `tracker.record_meeting()` (items, sync mode, items left for review) → move to `processed/`.
+
+`shared/pipeline.py`: `find_ready_files`, `move_to` (a plain rename: either it moves or it fails; no copies),
+`write_error_note`, `retry_failed`, `setup_logging` (safe to call twice).
+
+### Results (end-to-end in a scratch folder, agent on real extracted items)
+| scenario | outcome |
+|---|---|
+| m2 copied in before m1, + broken file | m1 synced first (date in name), broken → `failed/`, m2 next |
+| m1 again under another name | skipped: same audio hash |
+| Ollama down during m3's sync | 2 retries with rollback (0 changes) → `failed/`, tracker untouched |
+| `--retry-failed` | m3 synced (1 LLM call); broken file failed again |
+| (review) crash after sync, before recording | rerun undid 3 leftover changes before syncing again |
+
+### Independent review (separate reviewer agent)
+Found and fixed: a crash or Ctrl+C between the sync and `record_meeting` made the next run apply the meeting **twice**;
+two recordings named `standup.m4a` shared one id, so a failed week 2 rolled back week 1; an impossible date in a name
+crashed the whole run; on Windows, moving a file another program has open copied it into two folders. 6 new tests.
+
+### 4. Key concepts I should understand
+- **All or nothing across many small writes:** each tracker change commits on its own, so "the meeting" is not one
+  database transaction. The change log makes it one anyway: undo everything this meeting did. Example: Ollama
+  died in the middle of m3 → `undo_meeting("m3...")` → tracker exactly as before.
+- **Idempotency needs a clean restart, not just a skip:** "already processed?" is only answered *after* the sync.
+  A crash in between leaves changes without a record, so a rerun must first clear them (`start_clean()`).
+- **Ctrl+C is an exception too** (`KeyboardInterrupt`, a `BaseException`): cleanup code must catch it as well.
+- **Order is part of correctness:** tracker state depends on meeting order. Example: the older m1 must be synced
+  before m2, whatever order the files arrive in. A late older meeting is logged as a warning.
+- **Identity:** a file name isn't an identity (weekly `standup.m4a`); the audio hash is.
+
+### 5. Files created or changed
+- `02-meeting-action-agent/run.py`: the meeting pipeline.
+- `02-meeting-action-agent/tracker.py`: `meetings` table, `meeting_done`, `record_meeting`, `undo_meeting`, helpers.
+- `shared/pipeline.py`: reusable inbox helpers.
+- `02-meeting-action-agent/tests/test_run.py`: 9 tests (dates, rollback, Ctrl+C, interrupted run, same name, ...).
+- `.gitignore`: `02-meeting-action-agent/traces/`. `PROJECT_RULES.md`: status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python -m pytest 02-meeting-action-agent\tests -q
+copy 02-meeting-action-agent\testset\audio\m1_2026-09-07.wav 02-meeting-action-agent\inbox\
+python 02-meeting-action-agent\run.py
+python 02-meeting-action-agent\run.py
+```
+Expected: all tests pass; the first run logs transcribe / extract / `agent: N LLM calls` / `2026-09-07: 6 items,
+6 tracker changes` (several minutes on CPU, the first time also ~1 min Whisper + ~4 min extraction); the second run
+`0 processed` (inbox empty). Delete `02-meeting-action-agent\tracker.db` afterwards for a clean start.
+
+### 7. What can go wrong
+- **A late, older meeting** can overwrite newer news (e.g. reopen a finished task): warned, not prevented.
+- **Two copies of run.py at once** could interleave changes: run one at a time.
+- **The same audio re-encoded** has a new hash and is processed again.
+- **Slow:** a new meeting is ~1 min Whisper + ~4 min extraction + 2-15 min agent on CPU.
+
+### 8. Check my understanding
+1. Why isn't "skip if already in the meetings table" enough to make reruns safe? What does `start_clean()` add?
+2. Why must the rollback also catch `KeyboardInterrupt`?
+3. Two recordings are both called `standup.m4a`. What goes wrong if the file name is the meeting id?
+
+### 9. Next phase preview
+Phase 6 evaluates Part 2 end to end and runs the experiment the reviews pointed to: the same input items synced by
+the agent and by plain-code rules (no LLM), on perfect items and on real extracted items; plus extraction
+precision/recall and the definition of done.

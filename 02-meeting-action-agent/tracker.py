@@ -4,7 +4,9 @@
     add_task(conn, "Send the quote", owner="Priya", due="2026-09-09", status="open", meeting="m1", reason="...")
 
 Every change records the task's state before and after, so any agent decision can be inspected and undone
-(`undo_last()`). Plain functions, no LLM: the agent calls these through its tools.
+(`undo_last()`, or `undo_meeting()` to roll back a whole meeting whose sync failed halfway).
+The `meetings` table records which recordings were processed (idempotency, like Part 1's voicemails table).
+Plain functions, no LLM: the agent calls these through its tools.
 """
 
 import json
@@ -32,6 +34,16 @@ CREATE TABLE IF NOT EXISTS changes (
     after       TEXT NOT NULL,        -- JSON of the task after
     reason      TEXT NOT NULL,        -- why (the agent must always say)
     at          TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meetings (
+    audio_sha256  TEXT PRIMARY KEY,   -- same audio = same meeting, processed once
+    meeting       TEXT NOT NULL,      -- id used in tasks / changes (the file name without extension)
+    meeting_date  TEXT NOT NULL,
+    source_file   TEXT NOT NULL,
+    processed_at  TEXT NOT NULL,
+    items         INTEGER NOT NULL,   -- extracted items
+    sync_mode     TEXT NOT NULL,      -- agent | rules
+    review        TEXT NOT NULL       -- JSON list of items left for a human (step limit, no progress)
 );
 """
 FIELDS = ("id", "task", "owner", "due", "status", "updated_in")  # updated_in too, so undo can restore it
@@ -132,7 +144,40 @@ def undo_last(conn: sqlite3.Connection) -> dict | None:
     else:
         b = json.loads(last["before"])
         conn.execute("UPDATE tasks SET task = ?, owner = ?, due = ?, status = ?, updated_in = ? WHERE id = ?",
-                     (b["task"], b["owner"], b["due"], b["status"], b["updated_in"], b["id"]))
+                     (b["task"], b["owner"], b["due"], b["status"], b.get("updated_in", last["meeting"]), b["id"]))
     conn.execute("DELETE FROM changes WHERE id = ?", (last["id"],))
     conn.commit()
     return dict(last)
+
+
+def undo_meeting(conn: sqlite3.Connection, meeting: str) -> int:
+    """Roll back every change one meeting made, newest first. Used when its sync fails halfway, so a
+    retry starts from a clean tracker instead of a half-applied meeting. Returns how many were undone."""
+    undone = 0
+    while True:
+        last = conn.execute("SELECT meeting FROM changes ORDER BY id DESC LIMIT 1").fetchone()
+        if last is None or last["meeting"] != meeting:
+            return undone  # only the newest changes can belong to the meeting being processed
+        undo_last(conn)
+        undone += 1
+
+
+def meeting_done(conn: sqlite3.Connection, audio_sha256: str) -> bool:
+    return conn.execute("SELECT 1 FROM meetings WHERE audio_sha256 = ?", (audio_sha256,)).fetchone() is not None
+
+
+def meeting_id_used(conn: sqlite3.Connection, meeting: str) -> bool:
+    """True if a recorded meeting already uses this id (e.g. last week's "standup.m4a")."""
+    return conn.execute("SELECT 1 FROM meetings WHERE meeting = ?", (meeting,)).fetchone() is not None
+
+
+def latest_meeting_date(conn: sqlite3.Connection) -> str | None:
+    return conn.execute("SELECT MAX(meeting_date) FROM meetings").fetchone()[0]
+
+
+def record_meeting(conn: sqlite3.Connection, audio_sha256: str, meeting: str, meeting_date: str, source_file: str,
+                   items: int, sync_mode: str, review: list[str]) -> None:
+    conn.execute("INSERT INTO meetings VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                 (audio_sha256, meeting, meeting_date, source_file,
+                  datetime.now(timezone.utc).isoformat(timespec="seconds"), items, sync_mode, json.dumps(review)))
+    conn.commit()
