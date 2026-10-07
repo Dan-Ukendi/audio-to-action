@@ -18,7 +18,6 @@ the next step. That's what makes this a workflow, not an agent.
 
 import argparse
 import logging
-import shutil
 import sqlite3
 import sys
 import time
@@ -86,11 +85,15 @@ def already_processed(conn: sqlite3.Connection, audio_hash: str) -> bool:
 
 
 def move_to(path: Path, folder: Path) -> Path:
-    """Move a file into folder; if the name is taken, prefix a timestamp instead of overwriting."""
+    """Move a file into folder; if the name is taken, prefix a timestamp instead of overwriting.
+
+    A plain rename (all folders share one base folder, so one drive): it either happens or fails.
+    shutil.move falls back to copy + delete, and on Windows, when another program has the file open,
+    the delete fails and the file ends up in BOTH folders (found in Part 2, Phase 5)."""
     target = folder / path.name
     if target.exists():
         target = folder / f"{datetime.now():%Y%m%d-%H%M%S}_{path.name}"
-    return Path(shutil.move(str(path), str(target)))
+    return path.rename(target)
 
 
 def timed(step: str, name: str, fn, *args, **kwargs):
@@ -121,12 +124,17 @@ def process_file(path: Path, folders: Folders, conn: sqlite3.Connection) -> str:
 
         log.info("[%s] -> %s%s%s", name, decision.route, " +push" if decision.notify else "",
                  " +REVIEW" if decision.review else "")
+        step = "move"
         move_to(path, folders.processed)
         return "processed"
 
     except Exception as exc:  # one bad file must never stop the others
         log.error("[%s] FAILED at %s: %s: %s", name, step, type(exc).__name__, exc)
-        moved = move_to(path, folders.failed)
+        try:
+            moved = move_to(path, folders.failed)
+        except OSError as move_error:  # e.g. the file is open in another program: leave it, try next run
+            log.error("[%s] could not move to failed/ (%s); left in inbox", name, move_error)
+            return "failed"
         error_note = moved.with_name(moved.name + ".error.txt")
         error_note.write_text(
             f"file: {name}\nstep: {step}\ntime: {datetime.now().isoformat(timespec='seconds')}\n\n"

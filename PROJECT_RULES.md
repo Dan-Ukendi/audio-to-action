@@ -53,7 +53,7 @@ Keep it clear and friendly rather than long.
 4. Routing step (done: `routing.py` pure `route()` + safety-word net + review flags, `deliver.py`, `store.py` SQLite, `shared/notify.py`. User chose: minimal push text (no caller data), sales -> archive, ntfy dry run (`NTFY_DRY_RUN=1`) until a real random topic is set. Tests: `python -m pytest 01-voicemail-triage/tests`)
 5. Glue & reliability (done: `run.py` [--watch, --retry-failed, --base], skip if hash in SQLite, `shared/retry.py` retries only transient errors 2 s/4 s, push-before-save = at-least-once, `failed/` + `.error.txt`, `logs/run.log`. Tested end-to-end in a scratch folder)
 6. Evaluation (done: `evaluate.py` + `shared/evaluation.py`, `docs/eval-results.md` generated, conclusions in `docs/eval-notes.md`. small:v2 = category 15/18, urgent FN 0/6, names 10/18, numbers 16/18. Experiment v2->v3 (name example only) failed its pre-set rule: v2 stays. DoD 90% category NOT met; next: held-out data, turbo transcripts)
-7. Polish (done: `digest.py` daily page + counts-only push, full README with architecture/results/Task Scheduler commands, `docs/shared-for-part2.md`, `docs/HANDOVER.md` technical report). Part 1 complete; Part 2 not started
+7. Polish (done: `digest.py` daily page + counts-only push, full README with architecture/results/Task Scheduler commands, `docs/shared-for-part2.md`, `docs/HANDOVER.md` technical report). Part 1 complete. Phase 7 of Part 2 fixed Part 1's run.py file move (rename, no copy)
 
 ## Definition of done (Part 1)
 - ≥ 90% category accuracy on the test set.
@@ -111,14 +111,21 @@ and every tracker change recorded with its reason (reversible).
    `sync_with_rollback` (starts by undoing leftovers of an interrupted run; any error incl. Ctrl+C undoes the
    meeting's changes), same-named recordings get `stem_<hash8>` ids, `shared/pipeline.py` helpers (rename-based
    move_to, error notes, logging). E2E in a scratch folder passed; review fixed double-apply after a crash, same-name
-   wipe, bad-date crash, Windows open-file copy. TODO Phase 7: Part 1 run.py has the same shutil.move bug.)
+   wipe, bad-date crash, Windows open-file copy. Part 1 run.py had the same shutil.move bug: fixed in Phase 7.)
 6. Evaluation (done: `rules_sync.py` = plain-code sync baseline (`--sync rules`), `sync_testset.py --sync` saves
    `testset/sync_runs/*.json` (committed), `evaluate.py` -> `docs/part2-eval-results.md` + `docs/part2-eval-notes.md`.
    Experiment agent vs rules (same items): extracted 7/14 vs 6/14, gold 11/14 vs 14/14; agent 51 calls ~94 min, rules
    instant. Pre-registered rule -> default stays agent (margin within noise; both tuned on this set; perfect sync of
    extracted items = 9/14). DoD: extraction P/R and tracker >= 80 % NOT met; guardrails + idempotency met.
    After the run: not_work allowed for cancelled items with no similar task (m1 extracted 16 -> 2 calls))
-7. Polish: README, learning log, handover update
+7. Polish (done: Part 2 README rewritten, main README + docs/HANDOVER.md §12 updated, Part 1 run.py move fix,
+   learning log corrected; Part 2 complete)
+
+## Part 3: phone-receptionist (not started)
+User's early choices (2026-10-07, confirm before starting): calls arrive by **local simulation** (laptop mic/speakers
+or a scripted synthetic caller; no Twilio or other paid/cloud telephony), and the receptionist's job is **take a
+message** (name, number, reason) and hand it to the Part 1 pipeline (routing, urgent push). Start with a Phase 0 plan.
+When the user authorises several phases at once: after each phase, a separate reviewer agent verifies and optimises.
 
 ## Definition of done (Part 2)
 - Action items: precision ≥ 80 % and recall ≥ 80 % on the test set (item = task + owner match).

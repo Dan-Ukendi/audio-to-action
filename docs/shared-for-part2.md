@@ -1,5 +1,10 @@
 # What `shared/` gives Part 2 (meeting recordings → action items)
 
+> Written at the end of Part 1, before Part 2 existed. What actually happened: `transcribe.py` was reused with a new
+> `hint` (known names); the analyze pattern became `shared/llm.structured_chat()` (Part 1 uses it too); new shared
+> modules `tts.py` and `pipeline.py`; chunking exists but our meetings fit one chunk; owners came from names in
+> the words (no diarization). Current reference: `docs/HANDOVER.md` §12.
+
 Part 1 built every module in `shared/` without voicemail-specific logic except where noted.
 This is what Part 2 can import as-is, what it must replace, and what to watch out for.
 

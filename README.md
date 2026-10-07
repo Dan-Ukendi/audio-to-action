@@ -6,11 +6,12 @@ no cloud APIs, no audio leaving the machine.
 | Part | Folder | What | Style | Status |
 |---|---|---|---|---|
 | 1 | `01-voicemail-triage/` | Voicemails → transcript → category, urgency, caller, number, summary → routed | Workflow | done |
-| 2 | `02-meeting-action-agent/` | Meeting recordings → action items → task tracker sync | Workflow + agent | Phase 0 (plan) done |
+| 2 | `02-meeting-action-agent/` | Meeting recordings → action items → task tracker sync | Workflow + agent | done |
 | 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | Agent | not started |
 
-`shared/` holds code reused across parts (transcription, schemas, LLM analysis pattern, eval helpers,
-retries, notifications). See [docs/shared-for-part2.md](docs/shared-for-part2.md).
+`shared/` holds code reused across parts: transcription (+ name hint), schemas, the "fill a form with the LLM,
+validate, retry once" helper (`llm.py`), text-to-speech (`tts.py`), eval helpers, retries, notifications and
+inbox-pipeline helpers (`pipeline.py`).
 
 ## Part 1: how it works
 
@@ -41,6 +42,14 @@ retries, notifications). See [docs/shared-for-part2.md](docs/shared-for-part2.md
 **Why a workflow, not an agent:** the order of steps is fixed in code. The LLM fills in one form
 (category, urgency, name, number, summary) and never chooses what happens next. Routing is a set of
 `if` rules you can read and test. That makes every outcome explainable from the logs and the JSON files.
+
+## Part 2: how it works (summary)
+Weekly meeting recordings go into `02-meeting-action-agent/inbox/`; `run.py` transcribes them (Whisper + a hint with
+the team's and customers' names), **extracts** action items (workflow: the LLM fills a form, code checks owners and
+quotes and computes due dates) and **syncs** a SQLite task tracker across meetings, either with a bounded
+tool-calling **agent** (default) or with plain-code **rules** (`--sync rules`). A failed sync is rolled back.
+Measured: the agent beat the rules by one task on real extracted items (7/14 vs 6/14) at ~50 minutes of CPU per
+five meetings; on perfect input the rules won (14/14 vs 11/14). Details: [02-meeting-action-agent/README.md](02-meeting-action-agent/README.md).
 
 ## Setup (Windows / PowerShell)
 Needs Python 3.13, [ffmpeg](https://ffmpeg.org) on PATH and [Ollama](https://ollama.com).
@@ -87,6 +96,8 @@ because the public ntfy.sh server and anyone guessing the topic can read them.
 ## Testing and evaluation
 ```powershell
 python -m pytest 01-voicemail-triage\tests          # 11 unit tests: routing rules, retries (instant)
+python -m pytest 02-meeting-action-agent\tests      # 70 unit tests: dates, extraction, agent guards, rollback
+python 02-meeting-action-agent\evaluate.py          # Part 2 report from saved runs → docs\part2-eval-results.md
 python 01-voicemail-triage\evaluate.py              # metrics on the labelled test set → docs\eval-results.md
 python 01-voicemail-triage\route_testset.py         # routes the test set, fails if an urgent one is archived
 python 01-voicemail-triage\compare_models.py        # Whisper small vs large-v3-turbo
@@ -123,7 +134,9 @@ the database stay on this machine and are git-ignored; keep the repo outside syn
 - [docs/eval-results.md](docs/eval-results.md): metrics, confusion matrix, every error, experiment
 - [docs/transcription-comparison.md](docs/transcription-comparison.md): Whisper model comparison
 - [docs/HANDOVER.md](docs/HANDOVER.md): full technical report (architecture, code, decisions) for another developer or agent
-- [docs/shared-for-part2.md](docs/shared-for-part2.md): what Part 2 can reuse
+- [docs/shared-for-part2.md](docs/shared-for-part2.md): what Part 2 could reuse (written before Part 2)
+- [docs/part2-eval-results.md](docs/part2-eval-results.md): Part 2 metrics, the agent-vs-rules experiment, definition of done
+- [docs/part2-transcription-comparison.md](docs/part2-transcription-comparison.md): Whisper models × name hint on meetings
 
 ## Status
 - [x] Phase 0: Setup
@@ -134,3 +147,8 @@ the database stay on this machine and are git-ignored; keep the repo outside syn
 - [x] Phase 5: Glue & reliability (`run.py`: idempotent, retries, `failed/`, logs)
 - [x] Phase 6: Evaluation (`evaluate.py`, `docs/eval-results.md`, one experiment)
 - [x] Phase 7: Polish (digest, README, handover report)
+
+Part 2 (meetings): [x] 0 plan · [x] 1 test set · [x] 2 transcription + hint · [x] 3 extraction · [x] 4 agent ·
+[x] 5 glue & rollback · [x] 6 evaluation (agent vs rules) · [x] 7 polish.
+Part 3 (phone receptionist): not started; early choices: local simulation (mic/speaker or a scripted caller),
+take a message into the Part 1 pipeline.

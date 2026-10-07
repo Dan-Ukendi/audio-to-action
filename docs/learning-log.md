@@ -1222,7 +1222,7 @@ Found the temperature-0 fixed point (same state → same refused answer, 10 time
 not restoring `updated_in`; refactored `run_tool` into small functions (3000 random call sequences: identical
 behaviour). Its key finding: **a plain-code sync with no LLM** (match each item to the most similar open task, use the
 item's status, skip repeats) scores **14/14 on gold**, better than the agent, instantly and for free. On real extracted
-items both are capped by extraction (perfect links would give only 7/14). Phase 6 compares them properly.
+items both are capped by extraction (perfect links would give only 7/14; corrected in Phase 6: linking by hand gives 9/14). Phase 6 compares them properly.
 
 ### 4. Key concepts I should understand
 - **Agent = model chooses the next action in a loop.** Example: in m4 it called update_task five times and add_task
@@ -1233,7 +1233,7 @@ items both are capped by extraction (perfect links would give only 7/14). Phase 
   "update_task needs task_id... if new work use add_task" was followed on the next step.
 - **Models satisfy errors the cheapest way:** guess an id, omit a field, skip an item, rewrite a list. Every guard
   needs a check that the "fix" is real (Part 1 Phase 3 and Part 2 Phase 3 showed the same pattern).
-- **An agent isn't automatically better.** Example: for these items, 15 lines of matching rules beat the agent.
+- **An agent isn't automatically better.** Example: for these items, about 20 lines of matching rules beat the agent.
   The agent only earns its cost where rules can't decide (fuzzy wording, merged items, history lookups).
 
 ### 5. Files created or changed
@@ -1417,7 +1417,7 @@ caught that my decision rule was written after the (instant) rules results were 
 
 ### 4. Key concepts I should understand
 - **Always build the simple baseline:** without `rules_sync`, "11/14 on gold" would have looked fine. Next to 14/14 for
-  15 lines of code, it's a warning.
+  about 20 lines of code, it's a warning.
 - **Decide on the real pipeline, not the ideal input:** gold items test the method; extracted items test the product.
   Example: rules win on gold (14 vs 11), the agent wins on extracted (7 vs 6).
 - **Cost is a metric:** 94 minutes and 51 LLM calls vs under a second. +1 task has to be worth that.
@@ -1458,3 +1458,79 @@ Expected: the rules run ends `tracker: 14/14 tasks right` in about a second; `ev
 ### 9. Next phase preview
 Phase 7 polishes Part 2: README and handover updated with the meeting pipeline, the Windows file-move fix from Phase 5
 applied to Part 1 too, corrected numbers in this log, and a final summary of Part 2.
+
+---
+
+## Part 2, Phase 7: Polish (2026-10-08)
+
+### 1. What we built
+Nothing new for the pipeline; everything around it made accurate and complete: Part 2's README rewritten from "the
+plan" to "what was built and measured", the main README and the handover report (`docs/HANDOVER.md` §12) extended with
+Part 2, the Windows file-move bug found in Part 2 fixed in Part 1 too, an overclaimed number in this log corrected,
+and the Part 3 starting choices recorded in `PROJECT_RULES.md`.
+
+### 2. Where it fits in the pipeline
+```
+ Part 1: voicemail ─► transcribe ─► analyze ─► route ─► deliver/store          (workflow)
+ Part 2: meeting   ─► transcribe+hint ─► extract ─► sync (agent | rules) ─► tracker   (workflow + one agent)
+ [Phase 7: docs + fixes across both]  <-- you are here
+```
+
+### 3. How it works, step by step
+- `01-voicemail-triage/run.py` → `move_to()` now uses `path.rename()` (moves or fails, never copies), and a failed
+  move to `failed/` leaves the file in the inbox instead of stopping the run (same fix as Part 2 Phase 5).
+- `docs/HANDOVER.md` §12: Part 2's goal, decisions, files, data flow, every module's contract (tools, guards and
+  thresholds of the agent, tracker tables, cache keys), test set, results, decision log, gotchas, next steps.
+- `02-meeting-action-agent/README.md`, `README.md`, `docs/shared-for-part2.md`, `PROJECT_RULES.md`: current status.
+
+### 4. Key concepts I should understand
+- **A fix found in one part belongs in all parts:** the copy-instead-of-move bug existed in Part 1 too.
+- **Docs drift unless they're rewritten at the end:** the Part 2 README described a plan with "mark duplicate" and
+  "list_open_tasks" tools; the built agent has neither. The handover describes the code as it is.
+- **Record decisions with their reasons:** the next person (or agent) needs "why rules aren't the default" more than
+  the code itself.
+
+### 5. Files created or changed
+- `01-voicemail-triage/run.py`: rename-based move, safe failure path.
+- `02-meeting-action-agent/README.md`: rewritten. `README.md`: Part 2 summary, tests, docs, status.
+- `docs/HANDOVER.md`: §12 Part 2 + small updates. `docs/shared-for-part2.md`: "what actually happened" note.
+- `docs/learning-log.md`: corrected the 7/14 → 9/14 claim (Phase 4 entry). `PROJECT_RULES.md`: status + Part 3 choices.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests -q
+python 02-meeting-action-agent\evaluate.py
+```
+Expected: `81 passed`; the Part 2 report regenerated from saved runs in a few seconds (no LLM calls).
+
+### 7. What can go wrong
+- **Saved agent runs are from before the last agent fix:** re-run (~95 min) before quoting agent numbers again.
+- **Docs and code drift again** if later changes skip the handover.
+
+### 8. Check my understanding
+1. Which parts of Part 2 are workflow, and why is only the sync allowed to be an agent?
+2. If you had to ship Part 2 tomorrow on this laptop, would you use `--sync agent` or `--sync rules`? Why?
+3. What would you fix first to reach the 80 % definition of done?
+
+### 9. Next phase preview
+Part 2 is complete. Part 3 (real-time phone receptionist) starts with a Phase 0 plan based on your early choices:
+local simulation and "take a message" into the Part 1 pipeline.
+
+---
+
+## Part 2 summary
+| Step | Code | Workflow or agent? | Why |
+|---|---|---|---|
+| Transcribe (+ name hint) | `shared/transcribe.py`, `context.py` | workflow | always the same conversion |
+| Extract action items | `extract.py`, `shared/llm.py` | workflow step using an LLM | one meeting in, one validated form out; code checks owners, quotes, dates |
+| Sync the tracker | `agent.py` (or `rules_sync.py`) | **agent** (or rules) | relating items to existing tasks needs lookups and judgement... and the experiment showed plain rules come close |
+| Glue, rollback, idempotency | `run.py`, `tracker.py` | workflow | fixed order, all-or-nothing per meeting |
+
+What Part 2 taught, in one line each:
+- An agent must be **boxed in by code**: tools that only choose relationships, guards with helpful errors, step limits.
+- Models **satisfy errors the cheapest way** (guess, delete, skip, rewrite): check that every "fix" is real.
+- **Always build the simple baseline**: about 20 lines of rules scored 14/14 on perfect input where the agent scored 11/14.
+- **Decide on the real pipeline**, and read the cost (51 calls, ~94 min) next to the gain (+1 task).
+- **Independent review pays**: every Part 2 phase had a real bug or overclaim that the builder missed.
