@@ -1,0 +1,57 @@
+{
+  "items": "gold",
+  "sync": "rules",
+  "extraction_prompt": "x7",
+  "meetings": [
+    {
+      "id": "m1_2026-09-07",
+      "right": 5,
+      "expected": 5,
+      "problems": [],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.1,
+      "review": []
+    },
+    {
+      "id": "m2_2026-09-14",
+      "right": 7,
+      "expected": 7,
+      "problems": [],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.1,
+      "review": []
+    },
+    {
+      "id": "m3_2026-09-21",
+      "right": 9,
+      "expected": 9,
+      "problems": [],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.1,
+      "review": []
+    },
+    {
+      "id": "m4_2026-09-28",
+      "right": 11,
+      "expected": 11,
+      "problems": [],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.1,
+      "review": []
+    },
+    {
+      "id": "m5_2026-10-05",
+      "right": 14,
+      "expected": 14,
+      "problems": [],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.1,
+      "review": []
+    }
+  ]
+}

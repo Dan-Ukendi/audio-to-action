@@ -11,7 +11,7 @@ This is the only place in the project where the model decides what happens next.
   - add_task refuses an item that looks like an open task (duplicate) unless the model confirms it's new.
   - update_task refuses an item and a task with too few meaningful words in common (blocks guessed task ids).
   - A task can be changed by only one item per meeting; a "repeat" must mostly match the item it repeats;
-    a done/cancelled item can't be skipped as "not work" (it is news about work).
+    a done/cancelled item about a tracked task can't be skipped as "not work".
   - A step limit (= LLM calls) caps time and cost; items left at the limit go to a review list.
   - A failed LLM reply (e.g. the model looping) costs one step, not the run; the next input is changed.
   - Every change is stored with the agent's (non-empty) reason (tracker.changes) and every step in a JSON trace.
@@ -241,7 +241,7 @@ def update_item(run: SyncRun, conn: sqlite3.Connection, args: UpdateArgs) -> str
 
 def skip_item(run: SyncRun, conn: sqlite3.Connection, args: SkipArgs) -> str:
     """skip_item: no tracker change. A repeat must mostly match another real item of today (not a tracker
-    task: that's update_task); done/cancelled news is never 'not_work'."""
+    task: that's update_task); done/cancelled news about a tracked task is never 'not_work'."""
     item = run.items[args.item_id]
     if args.kind == "repeat_of_item":
         other = run.items.get(args.other_item) if args.other_item != args.item_id else None
@@ -253,7 +253,11 @@ def skip_item(run: SyncRun, conn: sqlite3.Connection, args: SkipArgs) -> str:
                     f"are different work, so it isn't a repeat. Use update_task or add_task for {args.item_id}.")
         run.handled[args.item_id] = f"skip (= {args.other_item})"
     else:
-        if item.status != "open":
+        # Done/cancelled news about a task we track is real work, not "not_work"... but a cancelled idea that
+        # never became a task ("let's leave the website for now") is fine to skip. Only refuse when some
+        # tracker task resembles it (Phase 6: refusing always made the agent loop to its step limit).
+        related = any(tracker.similarity(t["task"], item.task) >= MIN_SIMILARITY for t in tracker.all_tasks(conn))
+        if item.status != "open" and related:
             return (f"ERROR: {args.item_id} says work is {item.status}, which is news about real work, not 'not_work'. "
                     f"Use update_task on the task it is about (or add_task if the tracker doesn't have it).")
         run.handled[args.item_id] = "skip"

@@ -38,6 +38,7 @@ sys.path.insert(0, str(HERE))
 import context  # noqa: E402
 import tracker  # noqa: E402
 from agent import sync_meeting  # noqa: E402
+from rules_sync import rules_sync  # noqa: E402
 from extract import extract  # noqa: E402
 from shared.pipeline import find_ready_files, move_to, retry_failed, setup_logging, write_error_note  # noqa: E402
 from shared.retry import with_retries  # noqa: E402
@@ -96,7 +97,8 @@ def agent_sync(conn: sqlite3.Connection, meeting: str, day: date, items: list[Ex
     return [f"{i}: {run.items[i].task}" for i in run.unhandled()]
 
 
-SYNC_MODES = {"agent": agent_sync}  # Phase 6 adds a plain-code "rules" mode to compare against
+# "rules" = plain code, no LLM (rules_sync.py); "agent" = the bounded tool-calling agent (agent.py).
+SYNC_MODES = {"agent": agent_sync, "rules": rules_sync}
 
 
 def sync_with_rollback(sync, conn: sqlite3.Connection, meeting: str, day: date, items: list[ExtractedItem],

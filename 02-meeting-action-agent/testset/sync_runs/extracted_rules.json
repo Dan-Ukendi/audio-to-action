@@ -1,0 +1,92 @@
+{
+  "items": "extracted",
+  "sync": "rules",
+  "extraction_prompt": "x7",
+  "meetings": [
+    {
+      "id": "m1_2026-09-07",
+      "right": 4,
+      "expected": 5,
+      "problems": [
+        "T5 #5: owner None != 'Priya'"
+      ],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.0,
+      "review": []
+    },
+    {
+      "id": "m2_2026-09-14",
+      "right": 3,
+      "expected": 7,
+      "problems": [
+        "T4 duplicated as ['#4', '#6']",
+        "T5 #5: owner None != 'Priya'",
+        "T6 missing",
+        "T7 #7: owner None != 'Tom'"
+      ],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.0,
+      "review": []
+    },
+    {
+      "id": "m3_2026-09-21",
+      "right": 3,
+      "expected": 9,
+      "problems": [
+        "T4 duplicated as ['#4', '#6']",
+        "T5 duplicated as ['#5', '#10']",
+        "T6 missing",
+        "T7 duplicated as ['#7', '#9']",
+        "T9 #8: owner None != 'Tom'",
+        "T8 missing"
+      ],
+      "spurious": [],
+      "llm_calls": 0,
+      "seconds": 0.0,
+      "review": []
+    },
+    {
+      "id": "m4_2026-09-28",
+      "right": 4,
+      "expected": 11,
+      "problems": [
+        "T4 duplicated as ['#4', '#6']",
+        "T5 duplicated as ['#5', '#10']",
+        "T6 missing",
+        "T7 duplicated as ['#7', '#9']",
+        "T8 missing",
+        "T10 missing",
+        "T11 missing"
+      ],
+      "spurious": [
+        "#11 Order Gallagher buff from Sweet [open]"
+      ],
+      "llm_calls": 0,
+      "seconds": 0.0,
+      "review": []
+    },
+    {
+      "id": "m5_2026-10-05",
+      "right": 6,
+      "expected": 14,
+      "problems": [
+        "T4 duplicated as ['#4', '#6']",
+        "T5 duplicated as ['#5', '#10']",
+        "T6 missing",
+        "T7 duplicated as ['#7', '#9']",
+        "T8 missing",
+        "T10 missing",
+        "T11 missing",
+        "T14 duplicated as ['#14', '#15']"
+      ],
+      "spurious": [
+        "#11 Order Gallagher buff from Sweet [done]"
+      ],
+      "llm_calls": 0,
+      "seconds": 0.0,
+      "review": []
+    }
+  ]
+}

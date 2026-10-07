@@ -1366,3 +1366,95 @@ Expected: all tests pass; the first run logs transcribe / extract / `agent: N LL
 Phase 6 evaluates Part 2 end to end and runs the experiment the reviews pointed to: the same input items synced by
 the agent and by plain-code rules (no LLM), on perfect items and on real extracted items; plus extraction
 precision/recall and the definition of done.
+
+---
+
+## Part 2, Phase 6: Evaluation: agent vs rules (2026-10-08)
+
+### 1. What we built
+A measuring setup for the whole meeting pipeline and the experiment Part 2 was really about: **is the agent worth it?**
+We wrote a plain-code alternative for the tracker sync (`rules_sync.py`, no LLM: match each item to the most similar
+open task, use the item's status) and ran both methods on exactly the same items: the answer key's perfect items and
+the real extracted items. One report (`docs/part2-eval-results.md`) collects extraction scores, the four sync runs and
+the conclusions.
+
+### 2. Where it fits in the pipeline
+```
+ meeting audio ─► transcribe ─► extract ─► sync ─► tracker.db
+                                   │        ├── agent (LLM, tools, guards)    ┐ same items, same order,
+                                   │        └── rules (plain code, no LLM)    ┘ same scoring
+                                   ▼                         ▼
+             ┌──────────────────────────────────────────────────────────────────┐
+             │ [Phase 6: EVALUATE] extraction P/R + tracker after every meeting │ <-- you are here
+             └──────────────────────────────────────────────────────────────────┘
+```
+
+### 3. How it works, step by step
+1. `rules_sync(conn, meeting, day, items)`: per item: repeat of an earlier item today (same status, similarity ≥ 0.5)
+   → skip; done/cancelled → update the most similar open task if ≥ 0.2; open → update if ≥ 0.6; a cancelled item
+   with no match → skip (a postponed idea); otherwise add. Same signature as the agent, so `run.py --sync rules` works.
+2. `sync_testset.py --items gold|extracted --sync agent|rules`: empty tracker, five meetings in order, score after
+   each (`score_tracker`), save a summary to `testset/sync_runs/<items>_<sync>.json`.
+3. `evaluate.py`: extraction metrics from the cached x7 results, the sync table from the saved summaries, then the
+   hand-written `docs/part2-eval-notes.md` (experiment, pre-registered rule, result, definition of done).
+
+### Results
+| sync | gold items | **extracted items (decides)** | LLM calls | time |
+|---|---|---|---|---|
+| agent | 11/14 | **7/14** | 51 | ~94 min |
+| rules | **14/14** | 6/14 | 0 | < 1 s |
+
+Pre-registered rule: rules become the default only if they do at least as well on extracted items → **agent stays**.
+But: +1 task is within the agent's run-to-run noise (12/14 vs 11/14 on identical gold input), both methods were tuned
+on this test set, and a perfect sync of the extracted items would reach only **9/14**: extraction is the bigger limit.
+Definition of done: extraction and tracker ≥ 80 % **not met**; guardrails and idempotency **met**.
+
+### Independent review (separate reviewer agent)
+Reproduced every number, then corrected my conclusions: "the agent reached the 7/14 ceiling" was false (hand-linking
+gives 9/14); "the agent skips items" wasn't what the traces show (it got stuck on refused updates and made one wrong
+link); both methods were tuned on this data; a `--only m1` re-run had overwritten evidence of the full run. It also
+caught that my decision rule was written after the (instant) rules results were known: now stated in the notes.
+
+### 4. Key concepts I should understand
+- **Always build the simple baseline:** without `rules_sync`, "11/14 on gold" would have looked fine. Next to 14/14 for
+  15 lines of code, it's a warning.
+- **Decide on the real pipeline, not the ideal input:** gold items test the method; extracted items test the product.
+  Example: rules win on gold (14 vs 11), the agent wins on extracted (7 vs 6).
+- **Cost is a metric:** 94 minutes and 51 LLM calls vs under a second. +1 task has to be worth that.
+- **Noise and tuning limit what you can claim:** same input, same code (nearly), 12/14 one day and 11/14 the next.
+  A 1-task difference on 14 tasks isn't evidence.
+- **Find the real bottleneck:** even a perfect sync gets 9/14 from these extracted items. Improving the agent further
+  matters less than improving extraction (or transcription).
+
+### 5. Files created or changed
+- `02-meeting-action-agent/rules_sync.py` (+ `tests/test_rules_sync.py`): the non-agent sync.
+- `02-meeting-action-agent/sync_testset.py`: `--sync`, saved summaries in `testset/sync_runs/` (committed).
+- `02-meeting-action-agent/evaluate.py` → `docs/part2-eval-results.md`; `docs/part2-eval-notes.md` (conclusions).
+- `02-meeting-action-agent/run.py`: `--sync rules`. `agent.py`: not_work allowed for cancelled ideas with no similar task.
+- `PROJECT_RULES.md`: status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python 02-meeting-action-agent\sync_testset.py --items gold --sync rules
+python 02-meeting-action-agent\evaluate.py
+type docs\part2-eval-results.md
+```
+Expected: the rules run ends `tracker: 14/14 tasks right` in about a second; `evaluate.py` prints the extraction table
+(84 % / 75 % task only) and the four sync rows; the report ends with the conclusions and the definition of done.
+
+### 7. What can go wrong
+- **Over-reading small differences:** 14 tasks, 28 mentions; a run-to-run swing of ±1 task is normal for the agent.
+- **Overwriting evidence:** `sync_testset.py --only` reuses the same database and traces as a full run.
+- **Stale numbers:** the saved agent runs predate the last agent fix; re-run (~95 min) before comparing again.
+- **Tuning to the test:** guards and thresholds were chosen while looking at these meetings.
+
+### 8. Check my understanding
+1. Why does the decision use the extracted items and not the gold items?
+2. The agent scored 7/14 and the rules 6/14. Why is that not enough to say "the agent is better"?
+3. If a perfect sync only reaches 9/14, where would you spend the next week of work?
+
+### 9. Next phase preview
+Phase 7 polishes Part 2: README and handover updated with the meeting pipeline, the Windows file-move fix from Phase 5
+applied to Part 1 too, corrected numbers in this log, and a final summary of Part 2.

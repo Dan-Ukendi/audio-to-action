@@ -1,0 +1,69 @@
+{
+  "items": "gold",
+  "sync": "agent",
+  "extraction_prompt": "x7",
+  "meetings": [
+    {
+      "id": "m1_2026-09-07",
+      "right": 5,
+      "expected": 5,
+      "problems": [],
+      "spurious": [],
+      "llm_calls": 1,
+      "seconds": 149.5,
+      "review": []
+    },
+    {
+      "id": "m2_2026-09-14",
+      "right": 7,
+      "expected": 7,
+      "problems": [],
+      "spurious": [],
+      "llm_calls": 1,
+      "seconds": 209.1,
+      "review": []
+    },
+    {
+      "id": "m3_2026-09-21",
+      "right": 8,
+      "expected": 9,
+      "problems": [
+        "T9 missing"
+      ],
+      "spurious": [],
+      "llm_calls": 12,
+      "seconds": 1076.6,
+      "review": [
+        "B"
+      ]
+    },
+    {
+      "id": "m4_2026-09-28",
+      "right": 10,
+      "expected": 11,
+      "problems": [
+        "T11 missing"
+      ],
+      "spurious": [],
+      "llm_calls": 7,
+      "seconds": 951.9,
+      "review": [
+        "E"
+      ]
+    },
+    {
+      "id": "m5_2026-10-05",
+      "right": 11,
+      "expected": 14,
+      "problems": [
+        "T1 #1: owner 'Tom' != 'Priya', due '2026-10-12' != '2026-09-09', status 'open' != 'done'",
+        "T11 #11: due None != '2026-10-02'",
+        "T12 missing"
+      ],
+      "spurious": [],
+      "llm_calls": 2,
+      "seconds": 339.1,
+      "review": []
+    }
+  ]
+}

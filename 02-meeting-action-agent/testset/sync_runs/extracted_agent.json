@@ -1,0 +1,91 @@
+{
+  "items": "extracted",
+  "sync": "agent",
+  "extraction_prompt": "x7",
+  "meetings": [
+    {
+      "id": "m1_2026-09-07",
+      "right": 4,
+      "expected": 5,
+      "problems": [
+        "T5 #5: owner None != 'Priya'"
+      ],
+      "spurious": [],
+      "llm_calls": 16,
+      "seconds": 1256.7,
+      "review": [
+        "F"
+      ]
+    },
+    {
+      "id": "m2_2026-09-14",
+      "right": 4,
+      "expected": 7,
+      "problems": [
+        "T5 #5: owner None != 'Priya'",
+        "T6 missing",
+        "T7 #6: owner None != 'Tom'"
+      ],
+      "spurious": [],
+      "llm_calls": 2,
+      "seconds": 336.3,
+      "review": []
+    },
+    {
+      "id": "m3_2026-09-21",
+      "right": 4,
+      "expected": 9,
+      "problems": [
+        "T4 #4: status 'open' != 'done'",
+        "T6 missing",
+        "T7 duplicated as ['#6', '#8']",
+        "T9 #7: owner None != 'Tom'",
+        "T8 missing"
+      ],
+      "spurious": [],
+      "llm_calls": 1,
+      "seconds": 158.7,
+      "review": []
+    },
+    {
+      "id": "m4_2026-09-28",
+      "right": 6,
+      "expected": 11,
+      "problems": [
+        "T4 #4: status 'open' != 'done'",
+        "T6 missing",
+        "T7 duplicated as ['#6', '#8']",
+        "T8 missing",
+        "T10 missing"
+      ],
+      "spurious": [
+        "#10 Order Gallagher buff from Sweet [open]"
+      ],
+      "llm_calls": 4,
+      "seconds": 633.6,
+      "review": []
+    },
+    {
+      "id": "m5_2026-10-05",
+      "right": 7,
+      "expected": 14,
+      "problems": [
+        "T4 #4: status 'open' != 'done'",
+        "T6 missing",
+        "T7 duplicated as ['#6', '#8']",
+        "T8 missing",
+        "T10 #11: due None != '2026-09-30'",
+        "T12 missing",
+        "T14 duplicated as ['#13', '#14']"
+      ],
+      "spurious": [
+        "#10 Order Gallagher buff from Sweet [open]"
+      ],
+      "llm_calls": 5,
+      "seconds": 536.6,
+      "review": [
+        "B"
+      ]
+    }
+  ]
+}

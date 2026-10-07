@@ -113,8 +113,9 @@ def test_a_repeat_must_be_the_same_work():
                                         {"item_id": "B", "kind": "repeat_of_item", "other_item": "A", "reason": "?"})
 
 
-def test_done_news_is_never_not_work():
+def test_done_news_about_a_tracked_task_is_not_not_work():
     conn, run = setup(item("Fix the van's rear brake light", "done"))
+    earlier(conn, "Fix the van's rear brake light")
     assert "news about real work" in run_tool(run, conn, "skip_item", {"item_id": "A", "kind": "not_work", "reason": "?"})
 
 
@@ -170,3 +171,9 @@ def test_a_run_that_makes_no_progress_stops_instead_of_repeating(monkeypatch):
     # step 1 is refused, step 2 is refused with the same feedback, step 3 would be an identical input: stop.
     assert StuckModel.calls == 2 and not run.finished and run.unhandled() == ["A"]
     assert run.trace[-1]["stopped"].startswith("no progress")
+
+
+def test_a_cancelled_idea_that_never_was_a_task_can_be_skipped():
+    conn, run = setup(item("Discuss the new website", "cancelled"))
+    earlier(conn, "Check the van's rear brake light")  # unrelated work in the tracker
+    assert run_tool(run, conn, "skip_item", {"item_id": "A", "kind": "not_work", "reason": "postponed"}).startswith("OK")

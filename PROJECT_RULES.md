@@ -112,8 +112,12 @@ and every tracker change recorded with its reason (reversible).
    meeting's changes), same-named recordings get `stem_<hash8>` ids, `shared/pipeline.py` helpers (rename-based
    move_to, error notes, logging). E2E in a scratch folder passed; review fixed double-apply after a crash, same-name
    wipe, bad-date crash, Windows open-file copy. TODO Phase 7: Part 1 run.py has the same shutil.move bug.)
-6. Evaluation: item precision/recall, owner/due accuracy, tracker-state accuracy after the series,
-   experiment: workflow-only rules vs agent for the sync
+6. Evaluation (done: `rules_sync.py` = plain-code sync baseline (`--sync rules`), `sync_testset.py --sync` saves
+   `testset/sync_runs/*.json` (committed), `evaluate.py` -> `docs/part2-eval-results.md` + `docs/part2-eval-notes.md`.
+   Experiment agent vs rules (same items): extracted 7/14 vs 6/14, gold 11/14 vs 14/14; agent 51 calls ~94 min, rules
+   instant. Pre-registered rule -> default stays agent (margin within noise; both tuned on this set; perfect sync of
+   extracted items = 9/14). DoD: extraction P/R and tracker >= 80 % NOT met; guardrails + idempotency met.
+   After the run: not_work allowed for cancelled items with no similar task (m1 extracted 16 -> 2 calls))
 7. Polish: README, learning log, handover update
 
 ## Definition of done (Part 2)
