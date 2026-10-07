@@ -33,6 +33,7 @@
 02-meeting-action-agent/testset/audio/
 02-meeting-action-agent/testset/transcripts/
 02-meeting-action-agent/testset/results/
+02-meeting-action-agent/testset/traces_*/
 !02-meeting-action-agent/**/.gitkeep
 
 # Test set: scripts.json + labels.json + generate.py ARE committed;

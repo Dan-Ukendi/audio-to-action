@@ -1164,3 +1164,108 @@ seconds); then m5's transcript and its 6 items, e.g. `[done] Order the Gallagher
 Phase 4 builds the agent: a SQLite task tracker and a small set of tools (list/search tasks, add, update, close,
 finish) that the LLM calls in a loop to relate each meeting's items to existing tasks, with a step limit, validated
 tool arguments, a reason stored with every change, and a saved trace of every step.
+
+---
+
+## Part 2, Phase 4: The sync agent (2026-10-07/08)
+
+### 1. What we built
+The one part of the project where the model decides what to do next. After each meeting, an agent looks at
+the items extracted from it and at the task tracker (a small SQLite database), and for every item chooses:
+update an existing task, add a new one, or skip it (not real work / a repeat). It does this by calling tools
+in a loop until it says it's finished. Code boxes it in: it can only choose *which* task an item belongs to;
+the owner, date and status are copied from the item by code, and every choice passes plain-code checks.
+
+### 2. Where it fits in the pipeline
+```
+ meeting audio ─► 1. transcribe ─► 2. extract items ─► [3. SYNC AGENT] ─► tracker.db (+ trace JSON)
+                                                        <-- you are here
+   each step:  state message (items + what's done, tracker tasks, feedback) ─► qwen2.5:7b ─► tool calls
+               ─► run_tool(): guards ─► tracker.add_task / update_task (with reason) ─► next state ...
+               until finish (refused while items are unhandled) / step limit / no progress
+```
+
+### 3. How it works, step by step
+`02-meeting-action-agent/agent.py` → `sync_meeting(conn, meeting, date, items)`:
+1. Items get letters (A, B, C...): with "I5" the model linked item I5 to task #5 because the numbers matched.
+2. Each step builds a fresh `state_message()`: every item with "TO DO" or "HANDLED (update #3)", the open tasks
+   (plus tasks changed today), the results of the last tool calls, and what is still to do. No chat history.
+3. Ollama `chat(..., tools=tool_schemas())`: the tool list is generated from Pydantic models (`AddArgs`,
+   `UpdateArgs`, `SkipArgs`, ...), so the JSON schema the model sees is the same one that validates its calls.
+4. `run_tool()` checks every call before anything changes:
+   unknown tool / bad arguments (with advice, e.g. "update_task needs task_id... if new work use add_task");
+   item handled already; `update_task` only to a task with enough words in common (`similarity >= 0.2`) and only
+   one item per task per meeting; `add_task` refuses a near-duplicate of an open task unless `confirm_new`;
+   `skip_item` must say `not_work` or `repeat_of_item` (which must mostly match the other item), and a done item
+   is never "not work"; `finish` is refused while items are left; blank reasons are refused.
+5. `tracker.py` applies the change with `COALESCE` (a null never wipes a known owner or date) and logs before/after
+   + reason in `changes` (`undo_last()` reverses it).
+6. Stops on finish, on the step limit (2 × items + 4), or when a step changes nothing (no progress); anything left
+   goes to the review list in `traces_<mode>/<meeting>.trace.json`. A failed model reply costs one step, not the run.
+
+`sync_testset.py --items gold` feeds the agent the answer key's items (so extraction errors can't interfere) and
+scores the tracker after every meeting against `answer_key.tracker_states()`.
+
+### How the design evolved (each version run on the gold series)
+| version | change | result |
+|---|---|---|
+| v1 | chat history, tools as planned | m1: 0/5, 14 calls: replayed failing calls 10×, then **guessed task ids** to get past the errors |
+| v2 | state message instead of history; helpful error texts; relevance check | m1 5/5 (1 call), m2 6/7 |
+| v3 | `task_id` optional (for a nicer error) | the model **omitted it** and wrote "task #1" in the reason: the schema is part of the prompt |
+| v4 | `task_id` required again; letters for items; typed `skip_item` | m2 7/7 in 1 call |
+| v5 | one item per task per meeting; a repeat must share words | m3 8/9; series 11/14 |
+| v6 | a repeat must mostly match; done news is never "not work" | **12/14 (86 %)**, 25 calls, ~47 min; m3 stuck on an identical state 10× |
+| v6 + review | no-progress stop, blank reasons refused, readability refactor | same behaviour, fewer wasted calls |
+
+### Independent review (separate reviewer agent)
+Found the temperature-0 fixed point (same state → same refused answer, 10 times), blank reasons accepted, `undo_last`
+not restoring `updated_in`; refactored `run_tool` into small functions (3000 random call sequences: identical
+behaviour). Its key finding: **a plain-code sync with no LLM** (match each item to the most similar open task, use the
+item's status, skip repeats) scores **14/14 on gold**, better than the agent, instantly and for free. On real extracted
+items both are capped by extraction (perfect links would give only 7/14). Phase 6 compares them properly.
+
+### 4. Key concepts I should understand
+- **Agent = model chooses the next action in a loop.** Example: in m4 it called update_task five times and add_task
+  once, in an order it picked itself; the workflow parts of the project always run the same steps in the same order.
+- **Bound the agent with code, not with prompts.** Example: "item C is NOT task #3" in the prompt didn't stop the
+  I5→#5 mistake; the relevance check (`similarity < 0.2` → refused) did.
+- **Errors must say what to do instead.** Example: "Input should be a valid integer" was repeated forever;
+  "update_task needs task_id... if new work use add_task" was followed on the next step.
+- **Models satisfy errors the cheapest way:** guess an id, omit a field, skip an item, rewrite a list. Every guard
+  needs a check that the "fix" is real (Part 1 Phase 3 and Part 2 Phase 3 showed the same pattern).
+- **An agent isn't automatically better.** Example: for these items, 15 lines of matching rules beat the agent.
+  The agent only earns its cost where rules can't decide (fuzzy wording, merged items, history lookups).
+
+### 5. Files created or changed
+- `02-meeting-action-agent/tracker.py`: tasks + changes tables, search, similarity, add/update/undo.
+- `02-meeting-action-agent/agent.py`: tools, guards, state message, loop, trace.
+- `02-meeting-action-agent/sync_testset.py`: series runner + tracker scoring (gold / extracted).
+- `02-meeting-action-agent/tests/test_agent.py`: 17 guard tests (no LLM).
+- `.gitignore`: `testset/traces_*/`. `PROJECT_RULES.md`: Phase 4 status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python -m pytest 02-meeting-action-agent\tests -q
+python 02-meeting-action-agent\sync_testset.py --items gold --only m1
+type 02-meeting-action-agent\testset\traces_gold\m1_2026-09-07.trace.json
+```
+Expected: `68 passed` (with Part 1: run both test folders); then m1 with 5 `add` actions and `tracker: 5/5 tasks right`
+after ~3 min (one LLM call); the trace shows each tool call, its arguments, the agent's reason and the result.
+
+### 7. What can go wrong
+- **Slow and costly:** 1-16 LLM calls per meeting, ~2 min each on CPU. The step limit is also a time budget.
+- **The model ignores advice:** it plans all calls at once from the item list; refused calls are repeated.
+- **Plausible wrong links pass the guards:** "order the valve" vs "fit the valve" share 57 % of their words.
+- **Garbled task text sticks:** an update never changes a task's description, so "Gallagher court invoice" stays.
+- **Gold is easy mode:** answer-key wording makes every true update a 100 % word match.
+
+### 8. Check my understanding
+1. Why does each step get a fresh state message instead of the conversation so far? What new problem did that create?
+2. The agent can't set owners or dates itself. Why is that a good design, and what does it cost?
+3. If simple rules score 14/14 on gold, when would an agent still be worth it?
+
+### 9. Next phase preview
+Phase 5 glues Part 2 into `run.py` like Part 1: watch `inbox/`, transcribe with the name hint, extract, sync (agent or
+rules), move files, skip meetings already processed, retry Ollama hiccups, failed files to `failed/`, logs.

@@ -97,8 +97,15 @@ and every tracker change recorded with its reason (reversible).
    a test-set example leaked into the prompt and was removed (x7). Variance between runs is large on 28 mentions.
    Remaining misses: transcription ('court', 'Sweet') -> turbo is a Phase 6 experiment; 3 owners only from voice.
    Temperature 0 is not bit-exact on CPU: decisions mostly stable, wording varies.)
-4. The agent: tracker DB + tools (list/search open tasks, add, update, close, mark duplicate, finish),
-   tool-calling loop with step limit, trace saved as JSON
+4. The agent (done: `tracker.py` SQLite tasks + change log with reasons + undo; `agent.py` tool loop on qwen2.5:7b,
+   STATE-based (fresh state message each step, not chat history), tools search/add/update/skip/finish, item ids are
+   letters, values copied from items by code, guards in `run_tool` (relevance >= 0.2, one item per task per meeting,
+   duplicate add needs confirm_new, repeat >= 0.5, done items not 'not_work', blank reasons refused, no-progress
+   stop, failed LLM reply = one step), trace JSON per meeting; `sync_testset.py --items gold|extracted`.
+   Gold items (agent alone): 12/14 tracker tasks right after the series (86 %), 25 LLM calls, ~47 min CPU.
+   Story: chat-history version replayed failing calls and guessed ids (0/5); optional task_id got omitted;
+   'I5' was linked to task '#5'; temperature-0 fixed point in the state loop. KEY FINDING from the reviewer:
+   a plain-code rules sync (no LLM) gets 14/14 on gold -> Phase 6 must compare agent vs rules on realistic wording)
 5. Glue & reliability: `run.py` for meetings (idempotent by hash, retries, `failed/`, logs)
 6. Evaluation: item precision/recall, owner/due accuracy, tracker-state accuracy after the series,
    experiment: workflow-only rules vs agent for the sync
