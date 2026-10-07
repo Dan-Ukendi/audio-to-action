@@ -61,6 +61,44 @@ Keep it clear and friendly rather than long.
 - Re-running on the same file does nothing.
 - The user can explain why each step is a workflow step and not an agent.
 
+## Part 2: meeting-action-agent (`02-meeting-action-agent/`)
+Meeting recordings → action items (workflow) → task tracker kept in sync across meetings (agent).
+Full plan and design: `02-meeting-action-agent/README.md`.
+
+User's choices (Phase 0):
+- Test data: short **synthetic** meetings (2-4 min, 2-4 Piper voices), a *series* of weekly team meetings
+  at Brightwater Plumbing & Heating, so later meetings refer back to earlier tasks. Answer key written first.
+- Speakers: **no diarization**. Owners come from what is said ("Priya, can you…", "I'll take that, Tom here").
+- Agent job: **task tracker sync** only. Compare a meeting's extracted items with open tasks in a local
+  SQLite tracker and add / update / close / mark duplicate, using a fixed tool allowlist.
+
+The boundary to keep: transcription, extraction and storage are **workflow** steps (reuse Part 1 patterns).
+Only the tracker sync is an agent, because it needs lookups and judgement over existing state. The agent
+has a step limit, only allowlisted tools with Pydantic-validated arguments, a saved trace of every step,
+and every tracker change recorded with its reason (reversible).
+
+## Phases (Part 2)
+0. Plan & setup (done: plan in `02-meeting-action-agent/README.md`, folders, this section)
+1. Test set: series of synthetic meetings (scripts with speaker turns → Piper multi-voice audio), answer key
+   per meeting (action items: task, owner, due, status change) + expected tracker state after each meeting
+2. Transcription for longer audio: reuse `shared/transcribe.py`, check speed/quality on meetings, turn-level
+   timestamps; chunking if needed
+3. Extraction workflow: generalize the analyze pattern to any schema; `ActionItem`/`MeetingResult`;
+   per-chunk extraction + merge; validators; 1 retry
+4. The agent: tracker DB + tools (list/search open tasks, add, update, close, mark duplicate, finish),
+   tool-calling loop with step limit, trace saved as JSON
+5. Glue & reliability: `run.py` for meetings (idempotent by hash, retries, `failed/`, logs)
+6. Evaluation: item precision/recall, owner/due accuracy, tracker-state accuracy after the series,
+   experiment: workflow-only rules vs agent for the sync
+7. Polish: README, learning log, handover update
+
+## Definition of done (Part 2)
+- Action items: precision ≥ 80 % and recall ≥ 80 % on the test set (item = task + owner match).
+- Tracker state after the whole meeting series matches the answer key for ≥ 80 % of tasks.
+- The agent never exceeds its step limit or calls a tool outside the allowlist; every change has a logged reason.
+- Re-running on the same meeting does nothing.
+- The user can explain which steps are workflow, why the tracker sync is an agent, and what the agent costs.
+
 ## Commands
 - Activate venv: `.\.venv\Scripts\Activate.ps1`
 - Verify setup: `python scripts\check_setup.py`

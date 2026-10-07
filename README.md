@@ -6,7 +6,7 @@ no cloud APIs, no audio leaving the machine.
 | Part | Folder | What | Style | Status |
 |---|---|---|---|---|
 | 1 | `01-voicemail-triage/` | Voicemails → transcript → category, urgency, caller, number, summary → routed | Workflow | done |
-| 2 | `02-meeting-action-agent/` | Meeting recordings → action items | Workflow + agent | not started |
+| 2 | `02-meeting-action-agent/` | Meeting recordings → action items → task tracker sync | Workflow + agent | Phase 0 (plan) done |
 | 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | Agent | not started |
 
 `shared/` holds code reused across parts (transcription, schemas, LLM analysis pattern, eval helpers,

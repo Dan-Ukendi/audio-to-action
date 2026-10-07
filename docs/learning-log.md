@@ -783,3 +783,84 @@ the first place where a small agent part is allowed, so deciding what stays work
 | Route | `routing.py` | workflow | business rules as `if` statements: testable, explainable, same input → same output |
 | Deliver / store | `deliver.py`, `store.py` | workflow | side effects in a fixed order (push before save, at-least-once) |
 | Glue | `run.py` | workflow | fixed sequence, retries and failure handling in plain code |
+
+---
+
+# Part 2: meeting-action-agent
+
+## Part 2, Phase 0: Plan & setup (2026-10-07)
+
+### 1. What we built
+No code yet: a plan. We decided what Part 2 is for (meeting recordings → action items → a task tracker that
+stays correct across meetings), where the line between workflow and agent goes, how we'll test it, and what
+"done" means. The plan lives in `02-meeting-action-agent/README.md` and `PROJECT_RULES.md`, and the working folders exist.
+
+### 2. Where it fits in the pipeline
+```
+ [Phase 0: PLAN]  <-- you are here
+ meeting audio ─► 1. transcribe ─► 2. extract items ─► 3. SYNC with tracker ─► tracker.db + trace
+                  (workflow,        (workflow,           (AGENT: tool-calling
+                   reused)           Part 1 pattern)      loop, bounded)
+ measured against a synthetic meeting series + answer key (Phase 1) by the eval script (Phase 6)
+```
+
+### 3. How it works, step by step
+Nothing runs yet. The decisions, in the order they shape the work:
+1. **Test data:** a *series* of short synthetic weekly meetings (2-4 min, 2-4 Piper voices) at the Part 1
+   plumbing business. A series, because the agent's whole job is relating new items to old tasks.
+2. **Speakers:** no diarization; owners come from what people say. Cheaper, and its weak spot
+   ("I'll do it" from an unknown speaker) is something we'll measure, not guess about.
+3. **Agent:** only the tracker sync. Tools: `list_open_tasks`, `search_tasks`, `add_task`, `update_task`,
+   `close_task`, `mark_duplicate`, `finish`. Guardrails: step limit, allowlist, validated arguments, a reason
+   stored with every change, a saved trace.
+4. **Done =** item precision and recall ≥ 80 %, tracker state ≥ 80 % correct after the series, no guardrail
+   broken, re-runs do nothing, and you can explain the workflow/agent boundary.
+
+### 4. Key concepts I should understand
+- **Workflow vs agent:** in a workflow, *code* decides the next step; in an agent, the *model* decides which
+  tool to call next, in a loop, until it says it's finished. Example: "extract items from this transcript" is
+  always one step (workflow); "is this item the same as task #12, or an update to it, or new?" may need
+  1 lookup or 5 (agent).
+- **Agents need state to reason about:** without earlier tasks, there's nothing to decide. Example: the test
+  set is a meeting *series* so that "did Priya send the quote?" refers to a real task from an earlier meeting.
+- **Bounded autonomy:** an agent's path isn't fixed, so we fix its limits instead. Example: at most N steps,
+  only 7 tools, every argument checked by Pydantic, every change logged with a reason.
+- **Precision vs recall:** precision = of the items we found, how many are real; recall = of the real items,
+  how many we found. Example: inventing tasks hurts precision, missing "someone should look at the van" hurts recall.
+- **Decide what to measure before building:** like Part 1, the answer key (items per meeting, tracker state
+  after each) comes before any pipeline code.
+
+### 5. Files created or changed
+- `02-meeting-action-agent/README.md`: problem, planned architecture, decisions, phases.
+- `02-meeting-action-agent/{inbox,processed,failed,transcripts,results,testset}/.gitkeep`: working folders.
+- `02-meeting-action-agent/.gitkeep`: removed (the folder has real content now).
+- `.gitignore`: Part 2 working folders, logs, test audio/transcripts/results.
+- `PROJECT_RULES.md`: Part 2 section, phases, definition of done.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+type 02-meeting-action-agent\README.md
+git check-ignore -v 02-meeting-action-agent\inbox\test.wav
+```
+Expected: the plan prints; the second command shows the `.gitignore` rule that keeps meeting audio out of git.
+
+### 7. What can go wrong
+- **Synthetic meetings are too tidy:** real meetings have crosstalk, interruptions and half-sentences. Scores
+  will be optimistic, as in Part 1.
+- **Long audio on CPU:** a 4-min meeting ≈ 7 min of Whisper `small` plus several LLM minutes while the GPU shows
+  Code 43. That's why the meetings are kept short.
+- **Context length:** Ollama gave us a 4096-token context; a long transcript plus a prompt can exceed it
+  (Phase 3 handles this by chunking).
+- **Agent loops:** a model can keep calling tools without finishing; the step limit is the backstop.
+- **Owners without diarization:** "I'll handle it" means nothing without knowing who spoke.
+
+### 8. Check my understanding
+1. Why is "extract action items from this meeting" a workflow step, while "sync them with the tracker" is an agent?
+2. Why does the test set need several meetings in a row instead of independent ones?
+3. Give one example of an extraction mistake that hurts precision and one that hurts recall.
+
+### 9. Next phase preview
+Phase 1 builds the meeting series: scripts with speaker turns (who says what), rendered with several Piper
+voices into one audio file per meeting, and the answer key: action items per meeting and the expected
+tracker state after each meeting, written before any pipeline code.
