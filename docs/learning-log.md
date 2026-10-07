@@ -489,3 +489,112 @@ Phase 5 glues everything into `run.py`: watch `inbox/`, and for each new file ru
 deliver, then move it to `processed/`. Re-running on the same file does nothing (checked by hash in
 SQLite), network calls get retries with backoff, files that fail go to `failed/` with the error, and every
 step is logged.
+
+---
+
+## Part 1, Phase 5: Glue & reliability (2026-10-07)
+
+### 1. What we built
+`run.py`, the program that actually runs the pipeline. Drop a voicemail into `inbox/` and it gets
+transcribed, analyzed, routed, stored and moved to `processed/`. It's built to survive real life:
+the same audio twice does nothing the second time, a temporarily missing Ollama or ntfy gets retried
+with growing waits, a broken file ends up in `failed/` with a note saying why (the rest carry on),
+and every step is written to `logs/run.log`.
+
+### 2. Where it fits in the pipeline
+```
+ [Phase 5: run.py glues it all together]  <-- you are here
+ inbox/ ─► hash ─► seen before? ─yes─► processed/ (nothing else happens)
+              │no
+              ▼
+          1.transcribe ─► 2.analyze ─────► 3.deliver ─────────► processed/
+          (cache)         (cache, retries)  (route, push w/ retries, save)
+              │               │                 │
+              └───────────────┴─── any error ───┴──► failed/ + .error.txt
+ everything logged to logs/run.log;  --retry-failed puts failed/ files back in inbox/
+```
+
+### 3. How it works, step by step
+`01-voicemail-triage/run.py` → `main()`:
+1. `Folders(base)` creates/locates `inbox/ processed/ failed/ transcripts/ results/ logs/` and `voicemails.db`.
+   `--base` points it at another folder (we tested in a scratch copy, so the real DB stays clean).
+2. `setup_logging()` sends log lines to the console and `logs/run.log` (file names, steps, timings,
+   routes; never transcript text or numbers).
+3. `run_once()` → `find_ready_files()`: audio files in `inbox/`, oldest first, skipping anything changed in
+   the last 3 s (it may still be copying in) → `process_file()` for each.
+4. `process_file()`:
+   - `file_sha256()` → `already_processed()` checks SQLite. Found → move to `processed/`, return "skipped".
+   - `transcribe()` (cached) → `with_retries(analyze, ...)` → `deliver()` (whose push is also wrapped in
+     `with_retries`), each wrapped in `timed()` for the log.
+   - Success → `move_to(processed/)`. Any exception → log it, `move_to(failed/)`, write `<name>.error.txt`
+     with the step and traceback. It never raises, so one bad file can't stop the batch.
+5. `--watch` repeats `run_once()` every `--interval` seconds until Ctrl+C.
+   `--retry-failed` first moves `failed/` files back to `inbox/` (caches make the retry cheap).
+
+`shared/retry.py` → `with_retries(fn, ...)`: up to 3 attempts, waits 2 s then 4 s, but **only** if
+`is_transient(exc)`: connection errors, timeouts, HTTP 429/5xx. Anything else is raised immediately.
+
+### Results (scratch-folder test)
+| scenario | outcome |
+|---|---|
+| 3 voicemails + `broken.mp3` | 3 processed (1 push), broken → `failed/` with ffmpeg's error, batch continued |
+| same audio as 01, renamed | skipped: "already processed (same audio)", no push, no new row |
+| Ollama unreachable | retry after 2 s, after 4 s, then `failed/` at step "analyze" |
+| `--retry-failed`, Ollama back | real LLM call (202 s on CPU) → `inbox`; broken file failed again, instantly |
+| `--watch`, file dropped in while running | picked up ~4 s later and processed |
+
+### 4. Key concepts I should understand
+- **Idempotency:** doing it twice = doing it once. Example: `copy_of_pipe.wav` has the same bytes as
+  `01_urgent_burst_pipe.wav`, so its hash is already in SQLite: no LLM call, no second push.
+- **Transient vs permanent errors:** retry what might fix itself, fail fast on what won't. Example:
+  "can't connect to Ollama" → retried; "this .mp3 is text" → straight to `failed/` (retrying = wasted time).
+- **Exponential backoff:** wait 2 s, then 4 s (then 8 s...). Example: if Ollama is restarting, hammering it
+  every 0.1 s doesn't help; giving it more time each round does.
+- **At-least-once vs at-most-once:** across two systems (ntfy and SQLite) you can't guarantee "exactly once".
+  Example: push → crash → no row → next run pushes again. We chose that over save → crash → never pushed.
+- **Isolate failures:** `process_file()` catches everything for *one* file. Example: `broken.mp3` failed
+  between three good files and all three still went through.
+
+### 5. Files created or changed
+- `01-voicemail-triage/run.py`: the pipeline (once / `--watch` / `--retry-failed` / `--base`).
+- `shared/retry.py`: `is_transient()` and `with_retries()`.
+- `01-voicemail-triage/tests/test_retry.py`: 4 tests (backoff waits, give up, no retry on permanent, HTTP codes).
+- `01-voicemail-triage/deliver.py`: push wrapped in retries; at-least-once explained.
+- `shared/transcribe.py`: convert with ffmpeg *before* loading Whisper (broken files fail in 0 s, not 8 s).
+- `shared/notify.py`: dry-run message via `logging` instead of `print`. `route_testset.py`: logging setup.
+- `.gitignore`: `01-voicemail-triage/logs/`. `PROJECT_RULES.md`, `README.md`: status.
+
+### 6. Try it yourself
+In a new terminal (ffmpeg on PATH), Ollama running:
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+copy 01-voicemail-triage\testset\audio\13_other_appointment_confirm.wav 01-voicemail-triage\inbox\
+python 01-voicemail-triage\run.py
+python 01-voicemail-triage\run.py
+copy 01-voicemail-triage\processed\13_other_appointment_confirm.wav 01-voicemail-triage\inbox\again.wav
+python 01-voicemail-triage\run.py
+python 01-voicemail-triage\store.py
+```
+Expected: the first run logs `transcribe` (~20 s), `analyze` (~1-3 min on CPU), `-> inbox`, `1 processed`.
+The second run: `0 processed, 0 skipped, 0 failed` (inbox empty). The third: `again.wav already processed
+(same audio)`, `1 skipped`. `store.py` shows `inbox 1`. This uses the real `voicemails.db`; delete it
+afterwards for a clean start. Then try `python 01-voicemail-triage\run.py --watch` and copy a file in.
+
+### 7. What can go wrong
+- **Slow:** ~2-4 min per new voicemail while Ollama is on CPU (GPU Code 43).
+- **Duplicate push** after a crash between push and save: by design (at-least-once).
+- **Same message, different bytes = new voicemail:** idempotency is by exact file content.
+- **Failed files wait silently:** nothing alerts you about `failed/`; check it or the log (Phase 7 digest).
+- **Two runs at once** (e.g. two `--watch` terminals) can grab the same file. Run one at a time.
+- **Prompt change and old rows:** a voicemail already in the DB is never re-analyzed, even with a new prompt.
+
+### 8. Check my understanding
+1. You copy the same voicemail into `inbox/` twice under different names. What exactly happens to the second one, and which function decides that?
+2. Why does `with_retries` retry "can't connect to Ollama" but not an `AnalysisError` (invalid answer twice)?
+3. We push *before* saving. Describe the crash that causes a duplicate push, and the crash we avoided by not saving first.
+
+### 9. Next phase preview
+Phase 6 is evaluation: an eval script that runs the steps over the whole test set and computes metrics
+(category accuracy, urgent false-negative rate, name/number accuracy), writes `docs/eval-results.md`,
+and runs one single-variable experiment (candidate: the "Rachel from Acme" example that shortened names).

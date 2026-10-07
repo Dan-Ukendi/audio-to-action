@@ -113,12 +113,12 @@ def transcribe(path: str | Path, cache_dir: str | Path | None = None, model: str
     if cached and cached.exists():
         return Transcript.model_validate_json(cached.read_text(encoding="utf-8"))
 
-    whisper = load_model(model, cfg["device"], cfg["compute_type"], cfg["cpu_threads"])
-
     with tempfile.TemporaryDirectory() as tmp:
         wav = Path(tmp) / "audio_16k.wav"
-        to_wav_16k(path, wav)
+        to_wav_16k(path, wav)  # first: a broken file fails here, before seconds of model loading
         samples = read_wav_samples(wav)
+
+        whisper = load_model(model, cfg["device"], cfg["compute_type"], cfg["cpu_threads"])
 
         started = time.perf_counter()
         # beam_size=5: consider 5 candidate word sequences instead of 1; slower, more accurate.

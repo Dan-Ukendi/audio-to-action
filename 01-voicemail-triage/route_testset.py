@@ -8,6 +8,7 @@ Fails (exit code 1) if any voicemail labelled urgent ends up in the archive.
 """
 
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -25,6 +26,7 @@ TEST_DB = TESTSET / "triage_test.db"
 
 
 def main() -> int:
+    logging.basicConfig(level=logging.INFO, format="  %(message)s")  # shows the [ntfy dry run] lines
     TEST_DB.unlink(missing_ok=True)  # start clean so the summary only shows this run
     conn = connect(TEST_DB)
     labels = json.loads((TESTSET / "labels.json").read_text(encoding="utf-8"))["items"]

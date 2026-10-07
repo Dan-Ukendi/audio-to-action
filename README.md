@@ -33,7 +33,7 @@ and are git-ignored. Keep this repo outside synced folders (OneDrive, Dropbox).
 - [x] Phase 2: Transcription (`shared/transcribe.py`, results in `docs/transcription-comparison.md`)
 - [x] Phase 3: Analysis (`shared/analyze.py`, Ollama structured output + Pydantic validation + 1 retry)
 - [x] Phase 4: Routing (plain-code rules in `01-voicemail-triage/routing.py`, ntfy dry run, SQLite)
-- [ ] Phase 5: Glue & reliability
+- [x] Phase 5: Glue & reliability (`01-voicemail-triage/run.py`: idempotent by hash, retries with backoff, `failed/`, logs)
 - [ ] Phase 6: Evaluation
 - [ ] Phase 7: Polish
 

@@ -7,12 +7,14 @@ says that something needs attention. Details stay in the local database.
 Dry run (prints instead of sending) when NTFY_DRY_RUN=1 or no real topic is configured.
 """
 
+import logging
 import os
 
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+log = logging.getLogger(__name__)
 
 PLACEHOLDER_TOPIC = "change-me-to-something-random"  # the value in .env.example
 
@@ -34,7 +36,7 @@ def send_push(title: str, message: str, priority: str = "high", tags: str = "") 
     """
     cfg = settings()
     if cfg["dry_run"]:
-        print(f"  [ntfy dry run] priority={priority} title={title!r} message={message!r}")
+        log.info("[ntfy dry run] priority=%s title=%r message=%r", priority, title, message)
         return "dry_run"
 
     response = requests.post(

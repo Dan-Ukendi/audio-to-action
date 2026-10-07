@@ -21,6 +21,7 @@
 01-voicemail-triage/failed/*
 01-voicemail-triage/transcripts/*
 01-voicemail-triage/results/*
+01-voicemail-triage/logs/
 !01-voicemail-triage/**/.gitkeep
 
 # Test set: scripts.json + labels.json + generate.py ARE committed;

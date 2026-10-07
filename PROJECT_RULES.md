@@ -51,7 +51,7 @@ Keep it clear and friendly rather than long.
 2. Transcription step (done: `shared/transcribe.py`, CPU int8, 8 threads; small vs large-v3-turbo compared in `docs/transcription-comparison.md`; user kept `small` as default for speed. Known: "oh" often transcribed as "a", numbers sometimes as words, so Phase 3 must normalize numbers and prefer spelled-out names)
 3. Analysis step (done: `shared/analyze.py`, `Analysis`/`Result` in `shared/schemas.py`, prompt v2. On small transcripts: category 15/18, 0 urgent missed, 1 false urgent (12, scam with "deadline today"). v2's "Rachel from Acme" example made names first-name-only: candidate Phase 6 experiment. Ollama runs CPU-only (~1-2 min/voicemail) because the RTX 5050 shows Code 43 in Device Manager; user to update NVIDIA driver)
 4. Routing step (done: `routing.py` pure `route()` + safety-word net + review flags, `deliver.py`, `store.py` SQLite, `shared/notify.py`. User chose: minimal push text (no caller data), sales -> archive, ntfy dry run (`NTFY_DRY_RUN=1`) until a real random topic is set. Tests: `python -m pytest 01-voicemail-triage/tests`)
-5. Glue & reliability: `run.py`, idempotency by hash, retries with backoff, `failed/`, per-step logging
+5. Glue & reliability (done: `run.py` [--watch, --retry-failed, --base], skip if hash in SQLite, `shared/retry.py` retries only transient errors 2 s/4 s, push-before-save = at-least-once, `failed/` + `.error.txt`, `logs/run.log`. Tested end-to-end in a scratch folder)
 6. Evaluation: eval script, metrics (incl. urgent false-negative rate), `docs/eval-results.md`, one single-variable experiment
 7. Polish: daily digest, full README, summary of what `shared/` reuses in Part 2
 
