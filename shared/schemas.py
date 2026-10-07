@@ -5,10 +5,10 @@ object, and saving/loading to JSON is one call (model_dump_json / model_validate
 """
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 
 class Segment(BaseModel):
@@ -120,4 +120,102 @@ class Result(BaseModel):
     rejected_because: str | None = None
     analyze_s: float
     analysis: Analysis
+    created_at: datetime
+
+
+# ---------------------------------------------------------------- Part 2: meetings
+
+Status = Literal["open", "done", "cancelled"]
+
+
+class ActionItem(BaseModel):
+    """One task as a meeting talks about it: what the LLM must fill in for each item.
+
+    Field order: the evidence (exact words) first, then the interpretation. Validators that need
+    outside facts read them from the validation context: {"team": [...], "transcript": "..."}.
+    """
+
+    evidence: str = Field(description="The exact words from the transcript that show this item (one short quote).")
+    task: str = Field(description="Short description of the work itself, with customer and place names, "
+                                  "e.g. 'Send Siobhan Gallagher the bathroom quote'.")
+    owner: str | None = Field(description="Team member responsible; null if nobody is named or clearly implied.")
+    due_text: str | None = Field(description="The words used for when it will be done, exactly as said "
+                                             "(e.g. 'by Wednesday', 'this afternoon'); null if not said.")
+    status: Status = Field(description="open = still to do; done = said to be finished; cancelled = called off.")
+
+    @field_validator("owner")
+    @classmethod
+    def owner_on_team(cls, value: str | None, info: ValidationInfo) -> str | None:
+        """Owners must be real team members: catches invented names and customers as owners."""
+        if value is None or value.strip().lower() in {"", "unknown", "none", "null", "someone", "nobody"}:
+            return None
+        team = (info.context or {}).get("team")
+        if team:
+            match = next((member for member in team if member.lower() == value.strip().lower()), None)
+            if match is None:
+                raise ValueError(f"'{value}' is not on the team ({', '.join(team)}); use one of them or null.")
+            return match
+        return value.strip()
+
+    @field_validator("due_text")
+    @classmethod
+    def empty_due_is_none(cls, value: str | None) -> str | None:
+        # Models sometimes write the word "null" (or "none", "") instead of a real null.
+        if value is None or value.strip().lower() in {"", "null", "none", "n/a", "not said", "unknown"}:
+            return None
+        return value.strip()
+
+    @field_validator("evidence")
+    @classmethod
+    def evidence_in_transcript(cls, value: str, info: ValidationInfo) -> str:
+        """Most words of the quote must really appear in the transcript: a cheap check against invented items."""
+        transcript = (info.context or {}).get("transcript")
+        if transcript:
+            # Ignore '[00:23]' line times: the model often copies them, but the plain transcript has none
+            # (in a short quote like "[00:26] We'll do." they'd be half the words).
+            quote = re.sub(r"\[\d+:\d+\]", " ", value)
+            words = re.findall(r"[a-z0-9']+", quote.lower())
+            heard = set(re.findall(r"[a-z0-9']+", transcript.lower()))
+            if words and sum(w in heard for w in words) / len(words) < 0.6:
+                raise ValueError(f"the quote '{value}' is not in the transcript; quote the transcript's words exactly.")
+        return value
+
+
+class MeetingItems(BaseModel):
+    """The LLM's whole answer for one meeting (or one chunk of a long meeting).
+
+    jobs_mentioned comes first on purpose ("think first", like summary/reason before category in
+    Part 1): listing every job separately before writing items stops the model merging two jobs.
+    """
+
+    jobs_mentioned: list[str] = Field(description="Every distinct job talked about, in order, one short phrase "
+                                                  "each. A finished job and the new job that follows it are two entries.")
+    items: list[ActionItem]
+
+
+class ExtractedItem(ActionItem):
+    """An ActionItem after plain code resolved due_text into a calendar date."""
+
+    due: date | None = None
+    owner_from_llm: str | None = None  # what the LLM said before ground_owner() (to see what grounding changed)
+
+
+class MeetingResult(BaseModel):
+    """Output of the Part 2 extraction step, saved to disk as JSON (one per meeting)."""
+
+    source_file: str
+    audio_sha256: str
+    meeting_date: date
+    transcript_model: str
+    transcript_hint: bool  # was the Whisper name hint used?
+    llm_model: str
+    prompt_version: str
+    chunks: int  # how many pieces the transcript was split into
+    attempts: int  # total LLM calls (chunks + retries)
+    rejected: list[str]  # why any first answer was rejected (empty = none)
+    jobs_mentioned: list[str] = []  # the model's "think first" list (prompt x3+), kept for inspection
+    extract_s: float
+    items: list[ExtractedItem]
+    # The model's raw items per chunk, before merge + ground_owner (x6+): to see what plain code changed.
+    llm_items: list[list[ActionItem]] = []
     created_at: datetime

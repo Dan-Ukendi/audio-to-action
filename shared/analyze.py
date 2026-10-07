@@ -4,9 +4,8 @@
 
 Steps, in order:
     1. cache lookup   <cache_dir>/<hash>_<whisper>_<llm>_<prompt version>.json exists? return it
-    2. ask the LLM    Ollama chat with format=<Analysis JSON schema>: the reply MUST have that shape
-    3. validate       Pydantic checks types + our plain-code rules (UK number, urgent <-> urgency 3)
-    4. retry once     if validation fails, send the error back and ask for a corrected answer
+    2-4. shared/llm.structured_chat(): Ollama with format=<Analysis JSON schema>, Pydantic validation
+         (types + our plain-code rules: UK number, urgent <-> urgency 3), one retry with the errors
     5. save           write the Result JSON into the cache
 
 The LLM only fills in fields. It never decides what happens next: that's routing, plain code.
@@ -16,14 +15,12 @@ Try it:  python -m shared.analyze path\\to\\voicemail.wav
 
 import argparse
 import os
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import ollama
 from dotenv import load_dotenv
-from pydantic import ValidationError
 
+from shared.llm import LLMFormError, settings, structured_chat
 from shared.schemas import Analysis, Result, Transcript
 
 load_dotenv()
@@ -83,11 +80,9 @@ class AnalysisError(Exception):
     """The model gave an invalid answer twice. Carries both raw replies for inspection."""
 
 
-def settings() -> dict:
-    return {
-        "host": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-        "model": os.getenv("OLLAMA_MODEL", "qwen2.5:7b"),
-    }
+# The retry message for voicemails (kept word for word from before the shared helper existed).
+FIX_HINT = ("Fix the values using the transcript; do not replace a value "
+            "the caller actually said with null. Return the corrected JSON.")
 
 
 def cache_path(cache_dir: Path, transcript: Transcript, llm: str, prompt_version: str) -> Path:
@@ -96,69 +91,24 @@ def cache_path(cache_dir: Path, transcript: Transcript, llm: str, prompt_version
     return cache_dir / f"{transcript.audio_sha256[:16]}_{transcript.model}_{safe_llm}_{prompt_version}.json"
 
 
-def short_errors(error: ValidationError) -> str:
-    """Turn Pydantic's error list into a few readable lines for the model (and for us)."""
-    lines = []
-    for e in error.errors():
-        where = ".".join(str(part) for part in e["loc"]) or "answer"
-        lines.append(f"- {where}: {e['msg']}")
-    return "\n".join(lines)
-
-
-def ask_llm(client: ollama.Client, llm: str, messages: list[dict]) -> str:
-    """One chat call. format=<schema> makes Ollama constrain the output to that JSON shape."""
-    response = client.chat(
-        model=llm,
-        messages=messages,
-        format=Analysis.model_json_schema(),
-        options={"temperature": 0},  # always the most likely answer: repeatable runs
-    )
-    return response.message.content
-
-
 def analyze(transcript: Transcript, cache_dir: str | Path | None = None, llm: str | None = None,
             prompt_version: str | None = None) -> Result:
     """Analyze one transcript. With cache_dir, a transcript already analyzed is returned from disk."""
-    cfg = settings()
-    llm = llm or cfg["model"]
+    llm = llm or settings()["model"]
     prompt_version = prompt_version or DEFAULT_PROMPT_VERSION
 
     cached = cache_path(Path(cache_dir), transcript, llm, prompt_version) if cache_dir else None
     if cached and cached.exists():
         return Result.model_validate_json(cached.read_text(encoding="utf-8"))
 
-    client = ollama.Client(host=cfg["host"])
     messages = [
         {"role": "system", "content": PROMPTS[prompt_version]},
         {"role": "user", "content": f"Voicemail transcript:\n<<<\n{transcript.text}\n>>>"},
     ]
-
-    started = time.perf_counter()
-    replies = []
-    analysis = None
-    rejected_because = None
-    for attempt in (1, 2):  # first try + exactly one retry
-        raw = ask_llm(client, llm, messages)
-        replies.append(raw)
-        try:
-            analysis = Analysis.model_validate_json(raw)
-            break
-        except ValidationError as error:
-            if attempt == 2:
-                raise AnalysisError(
-                    f"{transcript.source_file}: invalid answer twice.\n{short_errors(error)}\nReplies: {replies}"
-                ) from error
-            rejected_because = short_errors(error)
-            # Show the model its own answer and what was wrong with it. Without this feedback a
-            # temperature-0 model would just repeat the same answer.
-            messages += [
-                {"role": "assistant", "content": raw},
-                {"role": "user", "content": "Your answer broke these rules:\n"
-                                            f"{rejected_because}\n"
-                                            "Fix the values using the transcript; do not replace a value "
-                                            "the caller actually said with null. Return the corrected JSON."},
-            ]
-    elapsed = time.perf_counter() - started
+    try:
+        reply = structured_chat(Analysis, messages, llm=llm, fix_hint=FIX_HINT)
+    except LLMFormError as error:
+        raise AnalysisError(f"{transcript.source_file}: {error}") from error
 
     result = Result(
         source_file=transcript.source_file,
@@ -166,11 +116,11 @@ def analyze(transcript: Transcript, cache_dir: str | Path | None = None, llm: st
         transcript_model=transcript.model,
         llm_model=llm,
         prompt_version=prompt_version,
-        attempts=attempt,
-        rejected_reply=replies[0] if attempt == 2 else None,
-        rejected_because=rejected_because,
-        analyze_s=round(elapsed, 2),
-        analysis=analysis,
+        attempts=reply.attempts,
+        rejected_reply=reply.rejected_reply,
+        rejected_because=reply.rejected_because,
+        analyze_s=reply.seconds,
+        analysis=reply.value,
         created_at=datetime.now(timezone.utc),
     )
 

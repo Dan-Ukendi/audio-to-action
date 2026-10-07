@@ -19,10 +19,10 @@
     "T6":  {"task": "Fit the new pressure valve at Mill Lane", "match": {"all": [["valve"], ["fit", "install", "replace"]], "none": ["order"]}},
     "T7":  {"task": "Book Margaret Ellis's annual gas safety check", "match": {"all": [["ellis"], ["book"]]}},
     "T8":  {"task": "Send Siobhan Gallagher a revised quote with a heated towel rail", "match": {"all": [["gallagher", "siobhan", "shivvon", "quote", "quotation"], ["revised", "towel", "updated"]]}},
-    "T9":  {"task": "Follow-up visit to Mill Lane to check the pressure is holding", "match": {"all": [["mill lane", "pressure"], ["follow", "check", "visit", "go back"]], "none": ["valve"]}},
+    "T9":  {"task": "Follow-up visit to Mill Lane to check the pressure is holding", "match": {"all": [["mill lane", "pressure"], ["follow", "check", "visit", "go back"]], "none": ["order", "fit"]}},
     "T10": {"task": "Order the Gallagher bathroom suite", "match": {"all": [["suite"], ["order"]]}},
     "T11": {"task": "Carry out Margaret Ellis's gas safety check", "match": {"all": [["ellis", "gas"], ["check", "inspection"]], "none": ["book"]}},
-    "T12": {"task": "Lead the Gallagher bathroom fit", "match": {"all": [["gallagher", "bathroom"], ["fit", "install", "lead", "start"]], "none": ["order", "quote", "suite"]}},
+    "T12": {"task": "Lead the Gallagher bathroom fit", "match": {"all": [["gallagher", "bathroom"], ["fit", "install", "lead", "start"]], "none": ["order", "quote"]}},
     "T13": {"task": "Renew the van tax", "match": {"all": [["tax"]]}},
     "T14": {"task": "Get three quotes from web designers", "match": {"all": [["web"]]}}
   },

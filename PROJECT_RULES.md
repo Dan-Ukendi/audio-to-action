@@ -86,8 +86,17 @@ and every tracker change recorded with its reason (reversible).
    holds team/customers/places (proper nouns only, never scored task words). `compare_transcription.py` ->
    `docs/part2-transcription-comparison.md`: small 8.5% WER / names 71%, **small+hint 5.3% / 98% (Part 2 default)**,
    turbo+hint 2.9% / 100% at 2x the time. Remaining misses: 'quote'->'court/call' (m2), 'suite'->'Sweet' (m4))
-3. Extraction workflow: generalize the analyze pattern to any schema; `ActionItem`/`MeetingResult`;
-   per-chunk extraction + merge; validators; 1 retry
+3. Extraction (done: `shared/llm.structured_chat()` = generic fill-form + validate + 1 retry, Part 1 `analyze()` now
+   uses it; `ActionItem`/`MeetingItems`/`MeetingResult` in `shared/schemas.py` (owner must be on team, evidence must be
+   in transcript, via validation context); `02-meeting-action-agent/extract.py` prompt x7 (worked example with invented
+   jobs, `jobs_mentioned` think-first list, `ground_owner()` drops owners not named nearby, done/cancelled -> no due,
+   raw model items kept as `llm_items`), chunking + merge (unit-tested only), `dates.py` resolves due words in code.
+   x7 (`extract_testset.py`): task-only precision 84 % / recall 75 %; task+owner (DoD) 64 % / 57 %; owner 84 % where
+   named, due 95 %, status 95 %; ~235 s/meeting on CPU. Lessons: a merge bug in OUR code looked like model error
+   (found by the reviewer); a coverage check + retry was tried and removed (model rewrote its job list instead);
+   a test-set example leaked into the prompt and was removed (x7). Variance between runs is large on 28 mentions.
+   Remaining misses: transcription ('court', 'Sweet') -> turbo is a Phase 6 experiment; 3 owners only from voice.
+   Temperature 0 is not bit-exact on CPU: decisions mostly stable, wording varies.)
 4. The agent: tracker DB + tools (list/search open tasks, add, update, close, mark duplicate, finish),
    tool-calling loop with step limit, trace saved as JSON
 5. Glue & reliability: `run.py` for meetings (idempotent by hash, retries, `failed/`, logs)

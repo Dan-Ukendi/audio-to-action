@@ -5,6 +5,7 @@ the labels the same way.
 """
 
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -83,3 +84,31 @@ def match_problems(tasks: dict) -> list[str]:
         if hits != [key]:
             found.append(f"{key}: its own text matches the rules of {hits}, expected only [{key!r}]")
     return found
+
+
+def overlap(a: str, b: str) -> float:
+    """Share of words two texts have in common (Jaccard): to pick the closest of several candidates."""
+    wa, wb = set(re.findall(r"[a-z]+", a.lower())), set(re.findall(r"[a-z]+", b.lower()))
+    return len(wa & wb) / len(wa | wb) if wa and wb else 0.0
+
+
+def match_items(item_tasks: list[str], mentions: list[dict], tasks: dict) -> tuple[list[tuple[int, dict]], list[int], list[dict]]:
+    """Pair extracted items (by their task text) with this meeting's mentions, one-to-one.
+
+    Returns (pairs [(item index, mention)], unmatched item indexes, missed mentions).
+    Candidate pairs are items whose text fits a mentioned task's match rule; the closest pairs
+    (word overlap with the task description) are taken first, so "Get three quotes for the website"
+    beats "Review the website" for T14. Items fitting no mentioned task are false positives.
+    """
+    candidates = [(overlap(text, tasks[m["task"]]["task"]), index, m)
+                  for index, text in enumerate(item_tasks)
+                  for m in mentions if matches(tasks[m["task"]]["match"], text)]
+    pairs, used_items, used_tasks = [], set(), set()
+    for _, index, m in sorted(candidates, key=lambda c: -c[0]):
+        if index not in used_items and m["task"] not in used_tasks:
+            pairs.append((index, m))
+            used_items.add(index)
+            used_tasks.add(m["task"])
+    extra = [i for i in range(len(item_tasks)) if i not in used_items]
+    missed = [m for m in mentions if m["task"] not in used_tasks]
+    return sorted(pairs, key=lambda p: p[0]), extra, missed

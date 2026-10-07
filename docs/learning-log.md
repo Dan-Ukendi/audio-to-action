@@ -1055,3 +1055,112 @@ with those names fixed.
 Phase 3 extracts action items from each transcript: a new schema (task, owner, due as said, status, evidence),
 the Part 1 "fill the form, validate, retry once" pattern generalised to any schema, owners checked against the
 team, due dates resolved by plain code from the words ("by Wednesday" + meeting date), and chunking for long meetings.
+
+---
+
+## Part 2, Phase 3: Extraction of action items (2026-10-07)
+
+### 1. What we built
+The step that reads one meeting's transcript and writes down every action item: what the work is, who owns it,
+when it's due, and whether it's open, done or cancelled, plus the exact quote it came from. It's a workflow step:
+one meeting in, one list out, no memory of earlier meetings (that's the agent's job in Phase 4). Along the way we
+turned Part 1's "fill the form, validate, retry once" into a shared helper that both parts now use.
+
+### 2. Where it fits in the pipeline
+```
+ meeting audio ─► 1. transcribe ─► [2. EXTRACT] ─────────────────────────────► 3. sync tracker (agent)
+                  (small + hint)    <-- you are here
+                  segments ─► [mm:ss] lines ─► LLM fills MeetingItems ─► validators (team, quote in transcript)
+                            ─► merge repeats ─► ground_owner() ─► resolve_due() ─► MeetingResult JSON
+```
+
+### 3. How it works, step by step
+`02-meeting-action-agent/extract.py` → `extract(transcript, meeting_date, cache_dir)`:
+1. `cache_path()`: `<audio hash>_<whisper model>_h<hint>_<llm>_<prompt version>.json`; hit → return.
+2. `chunk_segments()`: pieces of ≤ 1200 words on segment boundaries, overlapping by one segment (our meetings are 1 chunk).
+3. For each chunk, `shared/llm.structured_chat(MeetingItems, messages, context=...)`:
+   - messages: `SYSTEM_PROMPT` (business, team, what is / isn't an item, field rules, a worked example with
+     invented jobs) + "Meeting date: Monday 2026-09-14" + the transcript as `[mm:ss] text` lines (`format_transcript()`).
+   - Ollama `format=<schema>` forces `{"jobs_mentioned": [...], "items": [...]}`; `jobs_mentioned` comes first as a
+     "think first" list.
+   - Validators (`shared/schemas.py`, via the validation `context`): owner must be in `context["team"]` or null;
+     `due_text` "null" → None; at least 60 % of the evidence words must be in the transcript (invented items fail).
+   - Invalid → one retry with the errors; still invalid → `LLMFormError`.
+4. `finish_items()`: `merge_items()` (exact repeats anywhere, similar items only across chunks), `ground_owner()`
+   (owner kept only if their name is in the quote or the 2 lines before), `resolve_due()` (`dates.py`, plain code:
+   "by Wednesday" + meeting date → 2026-09-09; done/cancelled items get no due date).
+5. Save `MeetingResult` with the items, the model's raw items (`llm_items`), job list, attempts and timing.
+
+`extract_testset.py` scores it against `labels.json` using `answer_key.match_items()` (closest one-to-one pairs).
+
+### Results (prompt x7, Whisper small + hint, CPU)
+| | task only | task + owner (DoD) |
+|---|---|---|
+| precision | 21/25 (84 %) | 16/25 (64 %) |
+| recall | 21/28 (75 %) | 16/28 (57 %) |
+
+On matched items: owner 84 % where the words name someone, due 95 %, status 95 %. ~235 s per meeting.
+DoD (precision and recall ≥ 80 %, task + owner) **not met**.
+
+How we got there (each version re-scored on the same 5 meetings):
+x1 rules only (recall 71 %) → x2 worked example + owner grounding (75 %) → x3 "jobs_mentioned" first (75 %, owners
+better) → x4 done items get no due date → x5 a "every job needs an item" check + retry (tried and removed: the model
+rewrote its job list instead of adding items) → x6 **code bug fixed**: `merge_items` was merging similar items
+*within* one chunk ("order the suite" + "fit the suite"), which we had been blaming on the model → x7 removed an
+example copied from a test transcript ("the Gallagher court" = quote): a test-set leak.
+
+### Independent reviews (separate reviewer agent)
+Found the merge bug (high), an unfair T12 match rule, a `[mm:ss]` false-reject in the evidence check, date edge
+cases ("I **may** do it by the 25th" → May 2027; "for **now**" → today), "Tom's" not counting as Tom; pointed out that
+the headline was task-only (the DoD needs task + owner) and that the prompt leaked a test example. All fixed.
+
+### 4. Key concepts I should understand
+- **Validation context:** a validator can check facts from outside the answer. Example: `owner_on_team()` reads
+  `context["team"]`, so "Siobhan" (a customer) is rejected as an owner.
+- **Ground the model's claims in the input:** every item must quote the transcript, and an owner must be *named*
+  nearby. Example: three invented "Sam" owners were dropped by `ground_owner()`, never a correct one.
+- **Do deterministic work in code:** the LLM copies "by Wednesday"; `resolve_due()` does the calendar. Example: 30 date
+  tests, including "Monday" said on a Monday and "the 31st" in September.
+- **Look for bugs in your own code before blaming the model:** the "merged jobs" we tried to fix with three prompt
+  versions were partly made by `merge_items()`. Saving the raw model output (`llm_items`) makes this visible.
+- **Test-set leakage:** a prompt example taken from a test meeting makes scores look better than they are. Example:
+  "the Gallagher court" in the prompt; removed in x7.
+
+### 5. Files created or changed
+- `shared/llm.py`: `structured_chat()`, `short_errors()`, `LLMFormError`.
+- `shared/analyze.py`: Part 1 now uses `structured_chat()` (same messages, cache, errors).
+- `shared/schemas.py`: `ActionItem`, `MeetingItems`, `ExtractedItem`, `MeetingResult` + validators.
+- `02-meeting-action-agent/extract.py`, `dates.py`, `extract_testset.py`.
+- `02-meeting-action-agent/tests/test_dates.py`, `tests/test_extract.py`.
+- `02-meeting-action-agent/testset/answer_key.py` (`match_items`, `overlap`), `labels.json` (T9, T12 match rules).
+- `PROJECT_RULES.md`: Phase 3 status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python -m pytest 02-meeting-action-agent\tests -q
+python 02-meeting-action-agent\extract_testset.py
+python 02-meeting-action-agent\extract.py 02-meeting-action-agent\testset\audio\m5_2026-10-05.ogg 2026-10-05
+```
+Expected: `41 passed`; then the per-meeting table ending in `precision 21/25 (84%) recall 21/28 (75%)` (cached,
+seconds); then m5's transcript and its 6 items, e.g. `[done] Order the Gallagher bathroom suite` and
+`[open] Fit the Gallagher bathroom suite | owner=Tom due=2026-10-12`.
+
+### 7. What can go wrong
+- **Run-to-run variance:** m3 found 5 items with x6's prompt and 3 with x7's after a one-line change. With 28
+  mentions, a few points either way is noise.
+- **Owners from the voice:** "I'll handle that" stays unowned (by design): caps task + owner recall at 25/28.
+- **Misheard task words:** "Gallagher court invoice", "buff from Sweet" can't be matched to the right task.
+- **Slow:** ~4 min per meeting on CPU; prompt experiments take 20 min each.
+- **Long meetings:** chunking + merging is only unit-tested; real long recordings need a live check.
+
+### 8. Check my understanding
+1. Why does `resolve_due()` exist instead of asking the LLM for an ISO date?
+2. `ground_owner()` sets an owner to null even when the LLM gave a name. When is that the right call, and what does it cost?
+3. Why was copying "the Gallagher court = quote" into the prompt a problem even though it's a real mishearing?
+
+### 9. Next phase preview
+Phase 4 builds the agent: a SQLite task tracker and a small set of tools (list/search tasks, add, update, close,
+finish) that the LLM calls in a loop to relate each meeting's items to existing tasks, with a step limit, validated
+tool arguments, a reason stored with every change, and a saved trace of every step.
