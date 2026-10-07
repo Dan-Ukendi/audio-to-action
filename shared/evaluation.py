@@ -49,5 +49,22 @@ def confusion(pairs: list[tuple[str, str]], classes: list[str]) -> str:
     return "\n".join(lines)
 
 
+def word_errors(reference: str, hypothesis: str) -> tuple[int, int]:
+    """(edits, reference length) at word level: substitutions + insertions + deletions.
+
+    Word error rate = edits / reference length. Classic edit distance, one row at a time.
+    """
+    ref, hyp = norm_text(reference).split(), norm_text(hypothesis).split()
+    previous = list(range(len(hyp) + 1))
+    for i, ref_word in enumerate(ref, start=1):
+        current = [i]
+        for j, hyp_word in enumerate(hyp, start=1):
+            current.append(min(previous[j] + 1,  # deletion: reference word missing
+                               current[j - 1] + 1,  # insertion: extra word
+                               previous[j - 1] + (ref_word != hyp_word)))  # substitution (or match)
+        previous = current
+    return previous[-1], len(ref)
+
+
 def pct(part: int, whole: int) -> str:
     return f"{part}/{whole} ({part / whole:.0%})" if whole else "n/a"

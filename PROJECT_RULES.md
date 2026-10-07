@@ -82,8 +82,10 @@ and every tracker change recorded with its reason (reversible).
 1. Test set (done: 5 meetings ~30 s, voices Sam 7 / Priya 0 / Tom 9 / Jamie 11, `testset/{scripts,labels}.json`, `answer_key.py` folds mentions into tracker states, `generate.py`, `shared/tts.py`; 14 tasks, final 10 done / 1 cancelled / 3 open; 3 owners only knowable from voice)
    Original plan: series of synthetic meetings (scripts with speaker turns → Piper multi-voice audio), answer key
    per meeting (action items: task, owner, due, status change) + expected tracker state after each meeting
-2. Transcription for longer audio: reuse `shared/transcribe.py`, check speed/quality on meetings, turn-level
-   timestamps; chunking if needed
+2. Transcription (done: `transcribe(..., hint=)` = Whisper initial_prompt, part of the cache key; `02-meeting-action-agent/context.py`
+   holds team/customers/places (proper nouns only, never scored task words). `compare_transcription.py` ->
+   `docs/part2-transcription-comparison.md`: small 8.5% WER / names 71%, **small+hint 5.3% / 98% (Part 2 default)**,
+   turbo+hint 2.9% / 100% at 2x the time. Remaining misses: 'quote'->'court/call' (m2), 'suite'->'Sweet' (m4))
 3. Extraction workflow: generalize the analyze pattern to any schema; `ActionItem`/`MeetingResult`;
    per-chunk extraction + merge; validators; 1 retry
 4. The agent: tracker DB + tools (list/search open tasks, add, update, close, mark duplicate, finish),

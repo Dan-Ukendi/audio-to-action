@@ -28,6 +28,7 @@ class Transcript(BaseModel):
     source_file: str  # file name only, not the full path (keeps folder names out of the record)
     audio_sha256: str  # fingerprint of the audio bytes; the cache key
     model: str  # e.g. "small", "large-v3-turbo"
+    hint: str | None = None  # Whisper initial_prompt used, if any (default keeps old cache files valid)
     language: str  # detected, ISO 639-1 ("en")
     language_probability: float
     duration_s: float  # length of the audio

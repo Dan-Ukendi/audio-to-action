@@ -958,3 +958,100 @@ Expected: 5 lines like `[3/5] m3_2026-09-21.mp3  33 s, 11 turns`, then `labels.j
 Phase 2 runs `shared/transcribe.py` on the meetings: speed, quality, and the main question the reviewer raised:
 how much does giving Whisper the known names (team, customers, streets) as a hint help, measured on the
 names and words our match rules depend on.
+
+---
+
+## Part 2, Phase 2: Transcription of meetings (2026-10-07)
+
+### 1. What we built
+We reused Part 1's `transcribe()` for meetings and gave it one new ability: a **hint**, a short text with the
+names the business already knows (team, customers, streets) that Whisper treats as "what was said just before".
+Then we measured four setups on the five meetings. The hint took correct names from 71 % to 98 % with `small`,
+at almost no extra cost, so **`small` + hint** is the Part 2 default.
+
+### 2. Where it fits in the pipeline
+```
+ meeting audio ─► [1. TRANSCRIBE + name hint] ─► 2. extract items ─► 3. sync tracker (agent)
+                   <-- you are here
+                   ffmpeg → 16 kHz → Whisper small, initial_prompt = context.whisper_hint()
+                   cache: transcripts/<hash>_<model>_h<hint hash>.json
+```
+
+### 3. How it works, step by step
+1. `02-meeting-action-agent/context.py`: `TEAM`, `CUSTOMERS`, `PLACES` and `whisper_hint()` →
+   "Brightwater Plumbing & Heating weekly team meeting with Sam, Priya, Tom and Jamie. Customers: …".
+   Proper nouns only: task words such as "quote" are what we score, so hinting them would be cheating.
+2. `shared/transcribe.py` → `transcribe(path, cache_dir, model, hint)`: the hint goes to faster-whisper as
+   `initial_prompt`, and into the cache file name as an 8-character fingerprint (`_h3c46c32f`). No hint = the
+   old file name, so Part 1's caches still work; an empty hint counts as no hint.
+3. `02-meeting-action-agent/compare_transcription.py` → `run_config()` for each of `small`, `small+hint`,
+   `large-v3-turbo`, `large-v3-turbo+hint`, against the scripts (TTS spellings mapped back, "Preeya" → Priya):
+   - `word_errors()` (new in `shared/evaluation.py`): word-level edit distance → WER;
+   - `name_hits()`: each name occurrence said vs heard (word boundaries, so "Tom" ≠ "tomato");
+   - `recoverable()`: is each mentioned task still recognisable (`answer_key.matches`) in the transcript?
+4. `build_report()` → `docs/part2-transcription-comparison.md` (table, caveat, every transcript).
+
+### Results
+| config | WER | names | task words recoverable | real-time factor |
+|---|---|---|---|---|
+| small | 8.5 % | 32/45 (71 %) | 25/28 | 1.11 |
+| **small + hint (default)** | **5.3 %** | **44/45 (98 %)** | 26/28 | 1.27 |
+| large-v3-turbo | 3.8 % | 43/45 | 27/28 | 2.55 |
+| large-v3-turbo + hint | 2.9 % | 45/45 | 27/28 | 2.51 |
+
+Still lost with the default: "Gallagher **quote**" → "court"/"call" (m2, every model) and "bathroom **suite**" →
+"buff from Sweet" (m4). Phase 3 has to recover those from context.
+
+### Independent review (separate reviewer agent)
+Reproduced every number; checked `word_errors` on 9 hand cases, name counting, cache-key compatibility.
+Fixed: empty hint sharing the no-hint cache; duplicated matching code; docstring + a `--hint` CLI option.
+Findings: (1) the hint lists exactly the test names, so 98 % is a best case; a realistic 17-name list gave 93 %
+and once swapped in a look-alike ("Ellie"). (2) `initial_prompt` fades after ~220 tokens, so on long recordings
+`hotwords=` would be needed. (3) Beam 5 vs greedy: greedy 33 % faster but WER 3.9 % → 7.1 %, keep beam 5.
+(4) VAD trims nothing here. (5) Give the LLM one segment per line with timestamps in Phase 3.
+
+### 4. Key concepts I should understand
+- **Context helps recognition:** speech recognition guesses words from sound *and* from what seems likely. Telling
+  it the names makes them likely. Example: "Chavang Gallagher" → "Siobhan Gallagher" with the hint.
+- **Don't hint what you score:** if "quote" were in the hint, "task words recoverable" would go up because of the
+  hint, not because the system got better at listening. Example: we left "court" for "quote" as an honest miss.
+- **Best case vs realistic case:** a test that knows the answers in advance flatters you. Example: 98 % with the
+  exact names, 93 % with a realistic customer list.
+- **Cache keys must include every input that changes the output:** model *and* hint. Example: the same audio has
+  four cached transcripts, one per config, and none can be confused with another.
+- **WER is a summary, not the goal:** "7th" vs "seventh" counts as an error but harms nothing; "court" vs "quote"
+  is one word but breaks a task. That's why we also measure names and task words.
+
+### 5. Files created or changed
+- `shared/transcribe.py`: `hint` parameter (initial_prompt), hint in cache key, `--hint` CLI option.
+- `shared/schemas.py`: `Transcript.hint`. `shared/evaluation.py`: `word_errors()`.
+- `02-meeting-action-agent/context.py`: business knowledge + `whisper_hint()`.
+- `02-meeting-action-agent/compare_transcription.py` → `docs/part2-transcription-comparison.md`.
+- `PROJECT_RULES.md`: Phase 2 status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python 02-meeting-action-agent\compare_transcription.py
+python -m shared.transcribe 02-meeting-action-agent\testset\audio\m1_2026-09-07.wav --cache-dir 02-meeting-action-agent\testset\transcripts
+```
+Expected: the four result lines above in ~2 s (cached), then the m1 transcript *without* hint, with
+"Chavang Gallagher" and "boiler milling". Add `--hint "Siobhan Gallagher, Mill Lane"` to see a new (slow) run
+with those names fixed.
+
+### 7. What can go wrong
+- **Look-alike names in the hint:** "Mill Road" in the list can turn "Mill Lane" into the wrong street.
+- **Long recordings:** the hint fades after ~220 tokens; consider `hotwords=` then.
+- **Words outside the hint:** task words ("quote", "suite") get no help; extraction must cope.
+- **Noisy timings:** single runs; differences of ~15 % in speed are noise.
+
+### 8. Check my understanding
+1. Why is the hint allowed to contain "Siobhan Gallagher" but not "quote"?
+2. Why does the cache file name contain a fingerprint of the hint?
+3. small+hint has a lower WER than large-v3-turbo without hint on names, but a higher WER overall. Which matters more for this project, and why?
+
+### 9. Next phase preview
+Phase 3 extracts action items from each transcript: a new schema (task, owner, due as said, status, evidence),
+the Part 1 "fill the form, validate, retry once" pattern generalised to any schema, owners checked against the
+team, due dates resolved by plain code from the words ("by Wednesday" + meeting date), and chunking for long meetings.
