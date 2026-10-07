@@ -44,6 +44,7 @@
 # Python
 .venv/
 __pycache__/
+.pytest_cache/
 *.pyc
 
 # Model caches, if ever placed in the repo

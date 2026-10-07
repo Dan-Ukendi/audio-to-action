@@ -12,3 +12,5 @@ python-dotenv>=1.0
 requests>=2.31
 # Local text-to-speech, only used to generate the synthetic test set (GPL-3.0, dev tool)
 piper-tts>=1.3
+# Tests (dev only): python -m pytest 01-voicemail-triage/tests
+pytest>=8.0

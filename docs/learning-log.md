@@ -387,3 +387,105 @@ To see a retry, open `testset\results\*_v2.json` files with `"attempts": 2` and 
 Phase 4 adds routing in plain code: rules like "urgent → ntfy notification now", "spam → archive",
 "missing number or name → review queue". Every result is stored in SQLite. The model doesn't decide
 any of this; `if` statements do, and you'll be able to read every rule.
+
+---
+
+## Part 1, Phase 4: Routing (2026-10-07)
+
+### 1. What we built
+The part that *acts* on the analysis. Plain `if` rules decide where each voicemail goes (push now,
+inbox, personal, archive), whether a human should double-check it, and why. Urgent ones trigger an
+ntfy push with deliberately boring text ("Urgent voicemail, check the laptop"), and every voicemail
+becomes one row in a local SQLite database. The LLM decides nothing here; its answer is just input.
+Your choices: minimal push text, sales → archive, pushes in dry-run mode for now.
+
+### 2. Where it fits in the pipeline
+```
+ audio ─► inbox/ ─► 1.transcribe ─► 2.analyze ─► [3. ROUTE] ─► 4.store + move file
+                     (Phase 2)       (Phase 3)    (Phase 4)     (store: Phase 4, move: Phase 5)
+                                                  <-- you are here
+   Result + Transcript ─► route() ─► Decision ─► send_push() if notify ─► save() to SQLite
+                          (pure rules)           (ntfy, dry run)          (voicemails.db)
+```
+
+### 3. How it works, step by step
+`01-voicemail-triage/deliver.py` → `deliver(conn, transcript, result)`:
+1. `routing.route(transcript, result)` (pure, no side effects):
+   - `CATEGORY_ROUTE[category]`: urgent → `notify_now`, other → `inbox`, personal → `personal`,
+     spam/sales → `archive`.
+   - Safety net: `safety_hits(text)` searches `SAFETY_PATTERNS` (regex phrases like `smell(s)? of gas`,
+     `burst`, `sparking`, `no heating`). If any match and the LLM did **not** say urgent: never archive,
+     push anyway, flag review.
+   - Review flags: customer call (urgent/other) without number or name, analysis needed a retry,
+     Whisper confidence below -1.0, no speech at all.
+   - Returns a `Decision(route, notify, review, reasons)`; `reasons` is the plain-language trail.
+2. If `decision.notify`: `routing.push_text()` builds title/message (no caller data), and
+   `shared/notify.send_push()` POSTs it to `NTFY_SERVER/NTFY_TOPIC`, or prints it when `NTFY_DRY_RUN=1`.
+3. `store.save()` does `INSERT ... ON CONFLICT(audio_sha256) DO UPDATE`: one row per audio hash, and
+   `notified_at` keeps the *first* push time (`COALESCE`).
+
+`route_testset.py` runs this on the 18 cached results (instant) into `testset/triage_test.db`;
+`tests/test_routing.py` forces each rule with hand-made cases.
+
+### Results
+- Test set: 0 urgent archived. 7 pushes (6 real urgent + scam 12, which the LLM called urgent).
+  Archive: 09, 10 (sales), 11 (spam). Review: 04 (no number), 11 and 15 (retry), 12 (no name/number).
+- The safety net never fired on the test set (LLM caught every urgent call) and had no false alarms;
+  the unit tests prove it works when the LLM misses.
+- Whisper confidence was high everywhere (lowest -0.38), *including* the misheard files, so the
+  confidence flag can't catch "Carver" or the wrong number in 18.
+
+### 4. Key concepts I should understand
+- **Pure decision, separate actions:** `route()` only returns a decision; `deliver()` does the sending
+  and saving. Example: the 7 tests run in 0.4 s with no network, database or LLM.
+- **Defense in depth:** the LLM is the first filter; dumb keyword rules are a second, independent one.
+  Example: if the LLM calls "smell of gas" `other`, the regex still pushes. Two filters that fail in
+  *different* ways miss less than one clever filter.
+- **Asymmetric errors:** a false alarm (scam 12 pushed) costs Sam a glance; a missed emergency could cost
+  a flooded house or worse. So the rules lean towards pushing and reviewing, never towards archiving.
+- **Parameterized SQL:** `?` placeholders, never f-strings. Example: a caller saying
+  `'); DROP TABLE voicemails; --` is stored as text, not run as SQL.
+- **Privacy by content design:** the push says *that* something happened, not *what*. Example: a stranger
+  who guesses the topic learns "urgent voicemail at 14:32", not Tom Bradley's address.
+
+### 5. Files created or changed
+- `01-voicemail-triage/routing.py`: `route()`, `Decision`, safety patterns, `push_text()`.
+- `01-voicemail-triage/deliver.py`: `deliver()`: decide, push, save.
+- `01-voicemail-triage/store.py`: SQLite table, `connect()`, `save()`, `summary()` (+ command line).
+- `01-voicemail-triage/route_testset.py`: routes the test set, fails if an urgent one is archived.
+- `01-voicemail-triage/tests/test_routing.py`: 7 tests for the rules.
+- `shared/notify.py`: `send_push()` with dry-run mode.
+- `.env.example` / `.env`: `NTFY_DRY_RUN=1`. `requirements.txt`: `pytest`. `.gitignore`: `.pytest_cache/`.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python 01-voicemail-triage\route_testset.py
+python -m pytest 01-voicemail-triage\tests -v
+python 01-voicemail-triage\store.py 01-voicemail-triage\testset\triage_test.db
+```
+Expected: 7 `[ntfy dry run]` lines, a table per file, `Urgent voicemails routed to the archive: 0 []`;
+then `7 passed`; then counts `archive 3, inbox 6, notify_now 7, personal 2` and the 4 review items.
+Try it: in `routing.py` change `"sales": "archive"` to `"inbox"`, re-run the first command, and watch 09/10 move.
+
+### 7. What can go wrong
+- **False alarms:** scams written to sound urgent (12) get pushed. Accepted on purpose (asymmetric errors).
+- **Safety words missing a phrasing:** "I can smell something like gas" doesn't match `smell of gas`.
+  Regex nets are simple but never complete; add phrases when real voicemails slip through.
+- **Double push:** if saving crashes right after a real push, a re-run pushes again (Phase 5 fixes this).
+- **Topic left as placeholder:** pushes silently stay dry runs. That's intended until you set a real,
+  random `NTFY_TOPIC` and `NTFY_DRY_RUN=0`.
+- **ntfy.sh unreachable:** `send_push` raises after 10 s; Phase 5 adds retries with backoff.
+
+### 8. Check my understanding
+1. Why is `route()` written so it never sends or saves anything itself? What would be harder if it did?
+2. The LLM already classifies urgency. What does the regex safety net add, and why use phrases like
+   "smell of gas" instead of the single word "gas"?
+3. Scam 12 caused a push. Why do the rules accept that kind of mistake but not the opposite one?
+
+### 9. Next phase preview
+Phase 5 glues everything into `run.py`: watch `inbox/`, and for each new file run transcribe → analyze →
+deliver, then move it to `processed/`. Re-running on the same file does nothing (checked by hash in
+SQLite), network calls get retries with backoff, files that fail go to `failed/` with the error, and every
+step is logged.
