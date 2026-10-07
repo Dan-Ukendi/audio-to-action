@@ -46,8 +46,8 @@ Give this recap in chat **and** append it to `docs/learning-log.md` under a head
 Keep it clear and friendly rather than long.
 
 ## Phases (Part 1)
-0. Setup
-1. Build the test set (before any pipeline code): 15-20 synthetic voicemails (Piper TTS) + `testset/labels.json` + regeneration script
+0. Setup (done)
+1. Build the test set (done: 18 English synthetic voicemails, en_GB-vctk-medium, UK fictional numbers; user chose English only)
 2. Transcription step: `transcribe(path) -> Transcript` in `shared/`, ffmpeg conversion, hash-keyed cache, compare 2 model sizes
 3. Analysis step: Pydantic schema in `shared/`, `analyze(transcript) -> Result` via Ollama structured output, 1 retry
 4. Routing step: plain-code rules, ntfy, SQLite
@@ -64,3 +64,5 @@ Keep it clear and friendly rather than long.
 ## Commands
 - Activate venv: `.\.venv\Scripts\Activate.ps1`
 - Verify setup: `python scripts\check_setup.py`
+- Regenerate test audio: `python 01-voicemail-triage\testset\generate.py`
+- Always open text files with `encoding="utf-8"` (Windows defaults to cp1252).

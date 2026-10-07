@@ -1,0 +1,102 @@
+{
+  "_about": "Input side of the test set: what each synthetic voicemail SAYS and how it should SOUND. 'text' is written for the TTS engine (numbers as words, hard names spelled phonetically). The correct answers live in labels.json. Setting: Brightwater Plumbing & Heating, a small fictional UK business; the owner is called Sam. All phone numbers are from Ofcom's fictional ranges (07700 900xxx, 01632 960xxx).",
+  "_fields": {
+    "speaker": "Piper speaker id in en_GB-vctk-medium (0-108)",
+    "speed": "Piper length_scale: >1 slower, <1 faster",
+    "noise": "background noise amplitude, 0 = clean, ~0.03 light, ~0.08 heavy",
+    "phone": "true = squeeze into a narrow 8 kHz phone band like a real voicemail",
+    "format": "output file extension, to make sure the pipeline handles any format"
+  },
+  "voicemails": [
+    {
+      "id": "01_urgent_burst_pipe",
+      "speaker": 3, "speed": 0.95, "noise": 0, "phone": true, "format": "wav",
+      "text": "Hi, this is Mark Thompson calling for Brightwater Plumbing. A pipe has burst under my kitchen sink and there's water everywhere, it's coming through the ceiling downstairs. I've turned off the stopcock but I need someone out today please. My number is oh seven seven double oh, nine hundred, one two three. That's oh seven seven double oh, nine hundred, one two three. Thanks."
+    },
+    {
+      "id": "02_urgent_no_heating_elderly",
+      "speaker": 11, "speed": 1.2, "noise": 0, "phone": true, "format": "mp3",
+      "text": "Hello. Hello? Oh, it's the answering machine. This is Margaret Ellis. My boiler stopped working last night and I've got no heating and no hot water at all. I'm eighty-four and it's very cold in the house. Could somebody please come round. My telephone number is oh one six three two, nine six oh, four five six. Thank you dear."
+    },
+    {
+      "id": "03_urgent_gas_smell",
+      "speaker": 27, "speed": 0.8, "noise": 0.02, "phone": true, "format": "wav",
+      "text": "Yeah hi, um, it's Priya Shah, I had you lot out last month for the boiler service, and, um, there's a smell of gas in the hallway, like quite strong, near the boiler cupboard. I've opened the windows. I don't know if I should, I mean, should I turn it off? Please call me back right away, it's oh seven seven double oh, nine hundred, eight eight two."
+    },
+    {
+      "id": "04_urgent_vague_leak",
+      "speaker": 45, "speed": 1.0, "noise": 0, "phone": true, "format": "m4a",
+      "text": "Hi Sam, it's Dave from the flats on Station Road. It's about the leak again, it's got a lot worse since this morning. Can you call me back as soon as you get this. You've got my number. Cheers."
+    },
+    {
+      "id": "05_urgent_noisy_water_heater",
+      "speaker": 60, "speed": 0.95, "noise": 0.09, "phone": true, "format": "wav",
+      "text": "Hi, sorry about the noise, I'm on site. It's Tom Bradley from Bradley Lettings. The water heater at forty-two Mill Lane is leaking badly and the tenant says it's sparking near the electrics. We need someone there this afternoon. Call me on oh seven seven double oh, nine hundred, three four five."
+    },
+    {
+      "id": "06_urgent_landlord_deadline",
+      "speaker": 72, "speed": 1.0, "noise": 0, "phone": true, "format": "ogg",
+      "text": "Good morning, my name is Helen Carter. I've got new tenants moving into my property at nine o'clock tomorrow morning and the boiler is showing an error code, F twenty-eight. It has to be working before they arrive, so ideally tonight. Please ring me on oh one six three two, nine six oh, seven eight nine. Many thanks."
+    },
+    {
+      "id": "07_personal_mum",
+      "speaker": 11, "speed": 1.05, "noise": 0, "phone": true, "format": "m4a",
+      "text": "Hi love, it's Mum. Just checking you're still coming for Sunday lunch, your dad's doing the roast. Let me know if you're bringing anyone. No rush, speak soon. Love you."
+    },
+    {
+      "id": "08_personal_friend_football",
+      "speaker": 33, "speed": 0.95, "noise": 0.02, "phone": true, "format": "mp3",
+      "text": "Alright mate, it's Jamie. Five a side is moved to Thursday this week, eight o'clock, same pitch. I've got a new phone by the way so save this one, it's oh seven seven double oh, nine hundred, five five one. Let me know if you're in."
+    },
+    {
+      "id": "09_sales_boiler_supplier",
+      "speaker": 50, "speed": 1.0, "noise": 0, "phone": true, "format": "wav",
+      "text": "Hello, this is Rachel from Northern Heating Supplies. We're running a trade promotion this month, fifteen percent off all combi boilers for registered installers. If you'd like a price list, give me a call back on oh one six three two, nine six oh, two two two. Thanks very much."
+    },
+    {
+      "id": "10_sales_seo",
+      "speaker": 90, "speed": 0.9, "noise": 0, "phone": true, "format": "mp3",
+      "text": "Hi there, I'm calling from Top Rank Digital. We noticed your plumbing business isn't on the first page of Google, and we can guarantee to get you there within thirty days. I'd love to set up a quick ten minute call. Reach me on oh seven seven double oh, nine hundred, seven seven seven. Have a great day."
+    },
+    {
+      "id": "11_spam_tax_robocall",
+      "speaker": 5, "speed": 1.0, "noise": 0, "phone": true, "format": "wav",
+      "text": "This is an automated message from the tax office. Our records show an unpaid balance on your account. Legal proceedings will begin against you. To speak to an officer, press one now."
+    },
+    {
+      "id": "12_spam_fake_urgent_listing",
+      "speaker": 5, "speed": 0.9, "noise": 0, "phone": true, "format": "ogg",
+      "text": "Urgent. This is an urgent message regarding your Google business listing. Your listing will be suspended today unless you verify your details immediately. Press one to speak to a listing specialist. This is your final notice."
+    },
+    {
+      "id": "13_other_appointment_confirm",
+      "speaker": 64, "speed": 1.0, "noise": 0, "phone": true, "format": "wav",
+      "text": "Hi, it's Laura Jenkins. Just confirming the appointment on Thursday morning to fit the new radiator in the back bedroom. I'll be in from eight. If anything changes my number is oh seven seven double oh, nine hundred, two oh four. Thanks, bye."
+    },
+    {
+      "id": "14_other_quote_hard_name",
+      "speaker": 80, "speed": 1.0, "noise": 0, "phone": true, "format": "m4a",
+      "text": "Hello, my name is Shiv awn Gallagher, that's spelled S, I, O, B, H, A, N, Gallagher. I'm looking for a quote to redo our bathroom, new shower, toilet and sink. No rush, sometime in the next month would be great. You can reach me on oh one six three two, nine six oh, five oh one."
+    },
+    {
+      "id": "15_other_unspelled_name",
+      "speaker": 40, "speed": 1.05, "noise": 0, "phone": true, "format": "wav",
+      "text": "Hi, this is Voy chek Novak. I would like someone to look at my outside tap, it is dripping. It is not urgent. Please call me back, oh seven seven double oh, nine hundred, six one eight."
+    },
+    {
+      "id": "16_other_rambling_tap",
+      "speaker": 15, "speed": 1.1, "noise": 0.03, "phone": true, "format": "mp3",
+      "text": "Oh hello, yes, I'm ringing about, well, it's a bit of a long story really, my neighbour recommended you, she had her kitchen done, lovely job, anyway, my bathroom tap has been dripping for, oh, must be weeks now, it's not a big problem, I just put a cup under it, my number's oh one six three two, nine six oh, three one four, anyway my husband says he can fix it but he's been saying that since the summer, so I thought I'd just ring someone. Oh, it's Brenda by the way. Brenda Walsh. Okay, thank you, bye bye."
+    },
+    {
+      "id": "17_other_no_info",
+      "speaker": 25, "speed": 1.0, "noise": 0, "phone": true, "format": "ogg",
+      "text": "Hi, yeah, it's me. Can you give me a call back when you get a sec. Cheers."
+    },
+    {
+      "id": "18_other_number_corrected",
+      "speaker": 55, "speed": 1.0, "noise": 0, "phone": true, "format": "wav",
+      "text": "Hi, it's Chris Okafor. I'd like to book in a boiler service sometime next week. My number is oh seven seven double oh, nine hundred, four three, no sorry, three four nine. So that's oh seven seven double oh, nine hundred, three four nine. Thanks."
+    }
+  ]
+}

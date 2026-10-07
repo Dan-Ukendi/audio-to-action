@@ -8,3 +8,5 @@ pydantic>=2.7
 python-dotenv>=1.0
 # Plain HTTP, used for ntfy notifications (Phase 4)
 requests>=2.31
+# Local text-to-speech, only used to generate the synthetic test set (GPL-3.0, dev tool)
+piper-tts>=1.3

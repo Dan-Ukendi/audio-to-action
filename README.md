@@ -29,7 +29,7 @@ and are git-ignored. Keep this repo outside synced folders (OneDrive, Dropbox).
 
 ## Status
 - [x] Phase 0: Setup
-- [ ] Phase 1: Test set
+- [x] Phase 1: Test set (18 synthetic English voicemails)
 - [ ] Phase 2: Transcription
 - [ ] Phase 3: Analysis
 - [ ] Phase 4: Routing

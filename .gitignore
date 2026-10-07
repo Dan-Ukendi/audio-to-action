@@ -23,7 +23,12 @@
 01-voicemail-triage/results/*
 !01-voicemail-triage/**/.gitkeep
 
-# Your own real recordings for the test set (synthetic scripts + labels ARE committed)
+# Test set: scripts.json + labels.json + generate.py ARE committed;
+# generated audio and the downloaded TTS voice are not (regenerate with generate.py).
+01-voicemail-triage/testset/audio/
+01-voicemail-triage/testset/voices/
+*.onnx
+# Your own real recordings: real people's data, never committed
 01-voicemail-triage/testset/my_recordings/
 
 # Databases
