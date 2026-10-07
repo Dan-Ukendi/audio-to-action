@@ -1,0 +1,89 @@
+{
+  "_about": "Answer key for the Part 2 meeting series. Written BEFORE any pipeline code.",
+  "_conventions": {
+    "mentions": "What each meeting says about each task: the expected output of EXTRACTION for that meeting (stateless, one meeting at a time). Small talk and decisions not to act are not mentions.",
+    "status": "open (new or still to do) | done | cancelled",
+    "owner": "team member responsible (Sam, Priya, Tom, Jamie) as said or clearly implied in THIS meeting; null if nobody is named or implied",
+    "owner_from_text": "false when the owner is only knowable from WHO is speaking (we don't do speaker diarization). Measured separately.",
+    "due": "ISO date resolved from the meeting date; null if not said in THIS meeting. 'today'/'this afternoon' = meeting date, 'tomorrow' = +1 day, a weekday = that weekday in the meeting's week, 'end of the month' = last day of the month, a day of the month ('the thirtieth', 'the second') = the next such date on or after the meeting, 'at some point' = null. A start date ('starting Monday the twelfth') counts as the due date. If both a deadline and a promised date are said ('runs out on the fifteenth' + 'I'll do it this afternoon'), due = the promised date.",
+    "tracker_after": "Expected tracker state after each meeting = all mentions so far applied in order: a mention's non-null owner/due overwrite the task's values, its status always overwrites. Computed by answer_key.tracker_states(), so it can't drift from the mentions.",
+    "match": "How Phase 6 recognises a task in pipeline output (answer_key.matches): 'all' = every group must have at least one word in the task text (lowercase substring, so 'book' also matches 'booked'), 'none' = none of these words may appear. answer_key.problems() checks that each task's own text matches its own rule and no other."
+  },
+  "team": ["Sam", "Priya", "Tom", "Jamie"],
+  "tasks": {
+    "T1":  {"task": "Send Siobhan Gallagher the bathroom quote", "match": {"all": [["gallagher", "siobhan", "shivvon"], ["quote", "quotation"]], "none": ["revised", "towel", "updated"]}},
+    "T2":  {"task": "Order a pressure valve for the Mill Lane boiler", "match": {"all": [["valve"], ["order"]]}},
+    "T3":  {"task": "Fix the Station Road leak for Dave", "match": {"all": [["station road", "leak"]]}},
+    "T4":  {"task": "Fix the van's rear brake light", "match": {"all": [["brake"]]}},
+    "T5":  {"task": "Renew the van insurance", "match": {"all": [["insurance"]]}},
+    "T6":  {"task": "Fit the new pressure valve at Mill Lane", "match": {"all": [["valve"], ["fit", "install", "replace"]], "none": ["order"]}},
+    "T7":  {"task": "Book Margaret Ellis's annual gas safety check", "match": {"all": [["ellis"], ["book"]]}},
+    "T8":  {"task": "Send Siobhan Gallagher a revised quote with a heated towel rail", "match": {"all": [["gallagher", "siobhan", "shivvon", "quote", "quotation"], ["revised", "towel", "updated"]]}},
+    "T9":  {"task": "Follow-up visit to Mill Lane to check the pressure is holding", "match": {"all": [["mill lane", "pressure"], ["follow", "check", "visit", "go back"]], "none": ["valve"]}},
+    "T10": {"task": "Order the Gallagher bathroom suite", "match": {"all": [["suite"], ["order"]]}},
+    "T11": {"task": "Carry out Margaret Ellis's gas safety check", "match": {"all": [["ellis", "gas"], ["check", "inspection"]], "none": ["book"]}},
+    "T12": {"task": "Lead the Gallagher bathroom fit", "match": {"all": [["gallagher", "bathroom"], ["fit", "install", "lead", "start"]], "none": ["order", "quote", "suite"]}},
+    "T13": {"task": "Renew the van tax", "match": {"all": [["tax"]]}},
+    "T14": {"task": "Get three quotes from web designers", "match": {"all": [["web"]]}}
+  },
+  "meetings": [
+    {
+      "id": "m1_2026-09-07", "date": "2026-09-07", "file": "m1_2026-09-07.wav",
+      "mentions": [
+        {"task": "T1", "status": "open", "owner": "Priya", "due": "2026-09-09"},
+        {"task": "T2", "status": "open", "owner": "Tom", "due": "2026-09-07"},
+        {"task": "T3", "status": "open", "owner": "Jamie", "due": "2026-09-10"},
+        {"task": "T4", "status": "open", "owner": null, "due": null},
+        {"task": "T5", "status": "open", "owner": "Priya", "due": "2026-09-30", "owner_from_text": false}
+      ],
+      "not_tasks": ["the new website: explicitly postponed, not a task"]
+    },
+    {
+      "id": "m2_2026-09-14", "date": "2026-09-14", "file": "m2_2026-09-14.m4a",
+      "mentions": [
+        {"task": "T1", "status": "done", "owner": "Priya", "due": null},
+        {"task": "T2", "status": "done", "owner": "Tom", "due": null},
+        {"task": "T6", "status": "open", "owner": "Tom", "due": "2026-09-18"},
+        {"task": "T3", "status": "done", "owner": "Jamie", "due": null},
+        {"task": "T4", "status": "open", "owner": "Jamie", "due": "2026-09-15"},
+        {"task": "T7", "status": "open", "owner": "Tom", "due": "2026-09-30", "owner_from_text": false}
+      ],
+      "not_tasks": ["Gallagher wants to start in October: information, not a task yet"]
+    },
+    {
+      "id": "m3_2026-09-21", "date": "2026-09-21", "file": "m3_2026-09-21.mp3",
+      "mentions": [
+        {"task": "T6", "status": "done", "owner": "Tom", "due": null},
+        {"task": "T9", "status": "open", "owner": "Tom", "due": null},
+        {"task": "T4", "status": "done", "owner": "Jamie", "due": null},
+        {"task": "T8", "status": "open", "owner": "Priya", "due": "2026-09-24", "owner_from_text": false},
+        {"task": "T7", "status": "open", "owner": "Jamie", "due": "2026-09-23"},
+        {"task": "T5", "status": "open", "owner": "Priya", "due": "2026-09-30"}
+      ],
+      "not_tasks": []
+    },
+    {
+      "id": "m4_2026-09-28", "date": "2026-09-28", "file": "m4_2026-09-28.wav",
+      "mentions": [
+        {"task": "T5", "status": "done", "owner": "Priya", "due": null},
+        {"task": "T8", "status": "done", "owner": "Priya", "due": null},
+        {"task": "T10", "status": "open", "owner": "Tom", "due": "2026-09-30"},
+        {"task": "T7", "status": "done", "owner": "Jamie", "due": null},
+        {"task": "T11", "status": "open", "owner": "Tom", "due": "2026-10-02"},
+        {"task": "T9", "status": "cancelled", "owner": "Tom", "due": null}
+      ],
+      "not_tasks": []
+    },
+    {
+      "id": "m5_2026-10-05", "date": "2026-10-05", "file": "m5_2026-10-05.ogg",
+      "mentions": [
+        {"task": "T10", "status": "done", "owner": "Tom", "due": null},
+        {"task": "T12", "status": "open", "owner": "Tom", "due": "2026-10-12"},
+        {"task": "T11", "status": "done", "owner": "Tom", "due": null},
+        {"task": "T13", "status": "open", "owner": "Jamie", "due": "2026-10-05"},
+        {"task": "T14", "status": "open", "owner": "Priya", "due": "2026-10-31"}
+      ],
+      "not_tasks": []
+    }
+  ]
+}

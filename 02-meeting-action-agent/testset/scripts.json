@@ -1,0 +1,113 @@
+{
+  "_about": "Input side of the Part 2 test set: five weekly team meetings at Brightwater Plumbing & Heating (fictional), Mondays 7 Sep - 5 Oct 2026. Each meeting is a list of turns. 'text' is written for the TTS engine (hard names spelled phonetically). The correct answers live in labels.json.",
+  "_fields": {
+    "voices": "team member -> Piper speaker id in en_GB-vctk-medium",
+    "pause_s": "silence between turns",
+    "noise": "background noise amplitude (room/laptop mic), 0 = clean",
+    "format": "output file extension",
+    "turns": "[speaker, text] in order"
+  },
+  "voices": {"Sam": 7, "Priya": 0, "Tom": 9, "Jamie": 11},
+  "pause_s": 0.5,
+  "meetings": [
+    {
+      "id": "m1_2026-09-07",
+      "date": "2026-09-07",
+      "format": "wav",
+      "noise": 0.01,
+      "about": "Baseline: four clear new tasks, one task with no owner (van), one explicit non-task (website).",
+      "turns": [
+        ["Sam", "Morning everyone, it's Monday the seventh. Let's go through the week. First, the Gallagher bathroom. Preeya, can you send Shiv awn Gallagher the quote?"],
+        ["Priya", "Yes, I'll send it by Wednesday."],
+        ["Sam", "Great. Tom, the boiler at Mill Lane needs a new pressure valve. Can you order the part today?"],
+        ["Tom", "Sure, I'll order it this afternoon."],
+        ["Sam", "Jamie, you're on the Station Road leak for Dave on Thursday."],
+        ["Jamie", "Got it, Thursday morning."],
+        ["Sam", "Oh, and someone should look at the van. The rear brake light is out."],
+        ["Priya", "Also, the van insurance renewal is due at the end of the month. I'll handle that."],
+        ["Sam", "Thanks. About the new website, let's leave it for now. We'll talk about it another month."],
+        ["Sam", "That's everything. Thanks all."]
+      ]
+    },
+    {
+      "id": "m2_2026-09-14",
+      "date": "2026-09-14",
+      "format": "m4a",
+      "noise": 0.01,
+      "about": "Three tasks closed, the ownerless van task gets an owner, a follow-up task appears, and one owner is only knowable from the voice ('I'll book that in').",
+      "turns": [
+        ["Sam", "Right, quick catch-up. Preeya, did the Gallagher quote go out?"],
+        ["Priya", "Yes, I sent it on Tuesday. She'd like to start in October."],
+        ["Sam", "Tom, how's the valve for Mill Lane?"],
+        ["Tom", "Ordered last Monday, but the supplier says it won't arrive until Friday. I'll fit it as soon as it comes in, so Friday."],
+        ["Sam", "Jamie, the Station Road leak?"],
+        ["Jamie", "Fixed on Thursday. Dave's happy."],
+        ["Sam", "Good. The van brake light still isn't done. Jamie, can you take that one?"],
+        ["Jamie", "Yes, I'll do it tomorrow."],
+        ["Sam", "And we need to book the annual gas safety check for Margaret Ellis before the end of the month."],
+        ["Tom", "I'll book that in."],
+        ["Sam", "Perfect, thanks everyone."]
+      ]
+    },
+    {
+      "id": "m3_2026-09-21",
+      "date": "2026-09-21",
+      "format": "mp3",
+      "noise": 0.02,
+      "about": "Two tasks closed, a NEW Gallagher quote task that looks like the old one, an owner change (Ellis booking), a re-mention with no change (insurance), and a task with no date.",
+      "turns": [
+        ["Sam", "Morning. Tom, did the valve arrive?"],
+        ["Tom", "It did. I fitted it on Friday. I'd like to go back to Mill Lane at some point to check the pressure is holding."],
+        ["Sam", "Fine, put that on your list. Jamie, the van?"],
+        ["Jamie", "Brake light's fixed."],
+        ["Priya", "Shiv awn Gallagher rang. She wants to add a heated towel rail, so I'll send her a revised quote by Thursday."],
+        ["Sam", "Tom, have you booked the Ellis gas check yet?"],
+        ["Tom", "Not yet, sorry, I've been flat out. Jamie, could you book it instead?"],
+        ["Jamie", "No problem, I'll book it by Wednesday."],
+        ["Sam", "Preeya, remind me where we are with the insurance."],
+        ["Priya", "Still on my list. It's due on the thirtieth."],
+        ["Sam", "Okay. Thanks all."]
+      ]
+    },
+    {
+      "id": "m4_2026-09-28",
+      "date": "2026-09-28",
+      "format": "wav",
+      "noise": 0.01,
+      "about": "Three tasks closed, one task CANCELLED (Mill Lane follow-up), two new tasks, one of them a consequence of a closed one (gas check booked -> do the check).",
+      "turns": [
+        ["Sam", "Insurance first. Preeya?"],
+        ["Priya", "I renewed it on Friday. And the revised Gallagher quote went out on Thursday. She's accepted it."],
+        ["Sam", "Brilliant. Tom, can you order the Gallagher bathroom suite? By Wednesday if you can."],
+        ["Tom", "Yes, I'll order it by Wednesday."],
+        ["Sam", "Jamie, the Ellis gas check?"],
+        ["Jamie", "Booked for Friday the second of October."],
+        ["Sam", "Tom, can you do the check itself on the second?"],
+        ["Tom", "Yes, I'll do it."],
+        ["Sam", "One more thing. The Mill Lane landlord says the boiler is fine now, so let's cancel the follow-up visit, Tom."],
+        ["Tom", "Okay, cancelled."],
+        ["Sam", "Thanks everyone."]
+      ]
+    },
+    {
+      "id": "m5_2026-10-05",
+      "date": "2026-10-05",
+      "format": "ogg",
+      "noise": 0.02,
+      "about": "Two tasks closed and three new ones, including the website idea from meeting 1 finally becoming a task, and a task assigned by Priya rather than Sam.",
+      "turns": [
+        ["Sam", "Tom, did you order the Gallagher bathroom suite?"],
+        ["Tom", "Yes, ordered on Tuesday. It's arriving on the ninth."],
+        ["Sam", "Great. Tom, you'll lead the Gallagher fit, starting Monday the twelfth."],
+        ["Tom", "Yep, I'll start on the twelfth."],
+        ["Sam", "And Tom, the Ellis gas check?"],
+        ["Tom", "Done on Friday. All fine."],
+        ["Priya", "Jamie, can you renew the van tax? It runs out on the fifteenth."],
+        ["Jamie", "I'll do it this afternoon."],
+        ["Sam", "Preeya, let's finally look at the website. Can you get three quotes from web designers by the end of the month?"],
+        ["Priya", "Will do."],
+        ["Sam", "That's it. Thanks, everyone."]
+      ]
+    }
+  ]
+}

@@ -864,3 +864,97 @@ Expected: the plan prints; the second command shows the `.gitignore` rule that k
 Phase 1 builds the meeting series: scripts with speaker turns (who says what), rendered with several Piper
 voices into one audio file per meeting, and the answer key: action items per meeting and the expected
 tracker state after each meeting, written before any pipeline code.
+
+---
+
+## Part 2, Phase 1: Test set: a meeting series (2026-10-07)
+
+### 1. What we built
+Five fake-but-realistic weekly team meetings (Mondays 7 Sep - 5 Oct 2026) at the plumbing business, each
+~30 s, four distinct voices (Sam, Priya, Tom, Jamie), plus an answer key: 14 tasks and, per meeting, what is
+said about which task. Because later meetings close, reassign, cancel or repeat earlier tasks, the answer key
+also defines what the tracker should look like after every meeting (final: 10 done, 1 cancelled, 3 open).
+
+### 2. Where it fits in the pipeline
+```
+ meeting audio ─► 1. transcribe ─► 2. extract items ─► 3. SYNC with tracker (agent)
+                        ▲                  ▲                      ▲
+                        └──────────────────┴──────────────────────┘
+               compared against ┌──────────────────────────────────────────┐
+                                │ [Phase 1: MEETING SERIES + ANSWER KEY]   │ <-- you are here
+                                │ mentions per meeting, tracker after each │
+                                └──────────────────────────────────────────┘
+```
+
+### 3. How it works, step by step
+`02-meeting-action-agent/testset/generate.py` → `main()`:
+1. Reads `scripts.json`: per meeting a list of `[speaker, text]` turns; `voices` maps people to Piper speaker ids.
+2. `shared/tts.py` → `load_voice()` finds the Piper model Part 1 already downloaded; `synthesize()` speaks each turn.
+3. `join_turns()` glues the turn wavs together with 0.5 s pauses and records who spoke when (`audio/<id>.turns.json`:
+   ground truth we deliberately don't give the pipeline, since we chose no diarization).
+4. `degrade()` mixes in light pink noise (seed = meeting number) and encodes wav / m4a / mp3 / ogg.
+5. `check_labels()` → `answer_key.problems()`: unknown task keys or fields, bad statuses, owners not in the team,
+   due dates before the meeting, unused tasks, file names, and `match_problems()`: each task's description must
+   fit its own match rule and no other's (catches T1/T8, T7/T11 mix-ups in the rules).
+6. `answer_key.tracker_states()` folds the mentions meeting by meeting into the expected tracker.
+
+### Independent review (separate reviewer agent)
+Re-ran everything, checked every label against the conversation and the calendar, transcribed all meetings.
+Found and fixed: an unintended "owner only from the voice" in m5 (script now says "And Tom, the Ellis gas check?");
+Piper mispronouncing "Priya" so Whisper heard "Freya"/"prayer" (TTS spelling "Preeya", like "Shiv awn");
+two lines Whisper garbled beyond recovery ("Renewed on Friday" → "We need on Friday"; "Gallagher suite" →
+"sweeped"), reworded; a noise-seed bug with `--only`; silence size assumed 16-bit; stale-file check; typo'd
+fields; "quotation" added to quote rules. No answers changed. Its biggest finding for Phase 2: giving Whisper
+the known names (team, customers, streets) as a hint fixed nearly all name errors in a quick test.
+
+### 4. Key concepts I should understand
+- **State over time is what makes an agent necessary:** each meeting alone is easy; knowing that "did Priya send
+  the quote?" closes T1 requires remembering T1. Example: T5 insurance is re-mentioned in m3 with no change, and
+  the right action is *nothing*.
+- **Mentions vs tracker state:** extraction should output what *this* meeting says (mentions); the tracker is the
+  accumulation. Example: m2 says T1 is done but gives no due date, so the mention's due is null and the tracker
+  keeps 2026-09-09.
+- **Derived labels can't drift:** the expected tracker is computed from the mentions by one rule, instead of being
+  written by hand a second time. Example: change one mention and every later tracker state updates with it.
+- **Fix the input, not the answer:** when TTS or Whisper makes a label impossible to recover, reword the script.
+  Example: "Preeya" in the TTS text, "Priya" in the labels, the same idea as "Shiv awn" in Part 1.
+- **Synthetic audio isn't bit-for-bit reproducible:** Piper adds a little randomness, so regenerating changes file
+  hashes (and caches). Example: once Phase 2+ results exist, don't regenerate casually.
+
+### 5. Files created or changed
+- `02-meeting-action-agent/testset/scripts.json`: 5 meetings as speaker turns + voices, noise, formats.
+- `02-meeting-action-agent/testset/labels.json`: 14 tasks with match rules, mentions per meeting, conventions.
+- `02-meeting-action-agent/testset/answer_key.py`: load, `matches()`, `tracker_states()`, `problems()`, `match_problems()`.
+- `02-meeting-action-agent/testset/generate.py`: per-turn voices, joining, noise, encoding, checks.
+- `02-meeting-action-agent/testset/README.md`: what each trap tests.
+- `shared/tts.py`: reusable Piper wrapper (Part 3's receptionist will speak with it).
+- `PROJECT_RULES.md`: Phase 1 status.
+
+### 6. Try it yourself
+```powershell
+cd C:\Users\danuk\code\audio-to-action
+.\.venv\Scripts\Activate.ps1
+python 02-meeting-action-agent\testset\generate.py
+start 02-meeting-action-agent\testset\audio\m3_2026-09-21.mp3
+type 02-meeting-action-agent\testset\audio\m3_2026-09-21.turns.json
+```
+Expected: 5 lines like `[3/5] m3_2026-09-21.mp3  33 s, 11 turns`, then `labels.json is consistent…` and
+`Expected tracker after the series: 14 tasks, …10 done, 1 cancelled, 3 open`. The mp3 plays four different voices.
+(Regenerating makes slightly different audio; that's fine before Phase 2, avoid it afterwards.)
+
+### 7. What can go wrong
+- **Too tidy:** one TTS engine, no interruptions or crosstalk, short turns. Real meetings will be harder.
+- **Small:** 5 meetings, 28 mentions. One mistake moves a percentage a lot.
+- **Match rules are word lists:** a reasonable description like "carry out the booked check" can hit the wrong
+  task (T7 vs T11). Phase 6 should list items that match several tasks or none for a human look.
+- **Owners from the voice:** T5, T7, T8 can't be recovered from text alone, by design; they cap the owner score.
+
+### 8. Check my understanding
+1. In m3 Priya says the insurance is "still on my list, due on the thirtieth". What should the tracker do, and why is that a trap?
+2. Why are T1 (send quote) and T8 (send revised quote) two tasks and not a duplicate?
+3. Why does the answer key store *mentions* per meeting instead of the full tracker state per meeting?
+
+### 9. Next phase preview
+Phase 2 runs `shared/transcribe.py` on the meetings: speed, quality, and the main question the reviewer raised:
+how much does giving Whisper the known names (team, customers, streets) as a hint help, measured on the
+names and words our match rules depend on.

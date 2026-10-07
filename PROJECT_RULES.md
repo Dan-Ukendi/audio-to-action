@@ -66,7 +66,7 @@ Meeting recordings → action items (workflow) → task tracker kept in sync acr
 Full plan and design: `02-meeting-action-agent/README.md`.
 
 User's choices (Phase 0):
-- Test data: short **synthetic** meetings (2-4 min, 2-4 Piper voices), a *series* of weekly team meetings
+- Test data: short **synthetic** meetings (~30 s each in practice, 4 Piper voices), a *series* of weekly team meetings
   at Brightwater Plumbing & Heating, so later meetings refer back to earlier tasks. Answer key written first.
 - Speakers: **no diarization**. Owners come from what is said ("Priya, can you…", "I'll take that, Tom here").
 - Agent job: **task tracker sync** only. Compare a meeting's extracted items with open tasks in a local
@@ -79,7 +79,8 @@ and every tracker change recorded with its reason (reversible).
 
 ## Phases (Part 2)
 0. Plan & setup (done: plan in `02-meeting-action-agent/README.md`, folders, this section)
-1. Test set: series of synthetic meetings (scripts with speaker turns → Piper multi-voice audio), answer key
+1. Test set (done: 5 meetings ~30 s, voices Sam 7 / Priya 0 / Tom 9 / Jamie 11, `testset/{scripts,labels}.json`, `answer_key.py` folds mentions into tracker states, `generate.py`, `shared/tts.py`; 14 tasks, final 10 done / 1 cancelled / 3 open; 3 owners only knowable from voice)
+   Original plan: series of synthetic meetings (scripts with speaker turns → Piper multi-voice audio), answer key
    per meeting (action items: task, owner, due, status change) + expected tracker state after each meeting
 2. Transcription for longer audio: reuse `shared/transcribe.py`, check speed/quality on meetings, turn-level
    timestamps; chunking if needed
