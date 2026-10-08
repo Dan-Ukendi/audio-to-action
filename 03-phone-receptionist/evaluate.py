@@ -44,6 +44,7 @@ from spoken import digit_runs  # noqa: E402
 from store import connect  # noqa: E402  (Part 1)
 
 RESULTS_FILE = ROOT / "docs" / "part3-eval-results.md"
+AUDIO_RESULTS_FILE = ROOT / "docs" / "part3-eval-results-audio.md"   # the audio run has its own file: it must not overwrite the A-vs-B report
 LOGS = HERE / "logs"
 
 # The pre-registered rule (README section 4). Constants here, so the code cannot drift from the text without a test noticing.
@@ -103,15 +104,18 @@ def score_call(card: Card, record, pattern: re.Pattern, hand: handoff.HandOff | 
     faq_card = bool(want) or card.expect.faq_unknown
     unknown_ok = bool(m["unanswered_questions"]) == card.expect.faq_unknown
     traces = [t["decide_trace"] for t in record.turns if t.get("decide_trace")]
+    understand_fallbacks = sum(1 for t in record.turns if (t.get("understanding") or {}).get("fallback"))
+    analysis_fallback = bool(record.handoff) and str(record.handoff.get("llm_model", "")).startswith("none")
     bad_replies = [t["reply"] for t in record.turns if t.get("reply") and not pattern.fullmatch(t["reply"])]
     score = {
         "card": card.id, "split": card.split, "outcome": record.outcome, "outcome_ok": record.outcome == card.expect.outcome,
         "name": name_class, "number": number_class, "details_correct": (name_class == "correct") + (number_class == "correct"),
         "invented_number": invented_number(record), "urgent_expected": card.expect.urgent_flag, "urgent_flagged": m["urgent"],
         "missed_urgent": card.expect.urgent_flag and not m["urgent"], "false_urgent": m["urgent"] and not card.expect.urgent_flag,
-        "faq_card": faq_card, "faq_ok": faq_card and want <= got and unknown_ok,
+        "faq_card": faq_card, "faq_ok": faq_card and want <= got and not (got - want) and unknown_ok,
         "faq_missing": sorted(want - got), "faq_extra": sorted(got - want), "unknown_ok": unknown_ok,
         "non_approved_replies": bad_replies, "turns": len(record.turns), "cut_off": record.cut_off,
+        "understand_fallbacks": understand_fallbacks, "analysis_fallback": analysis_fallback,
         "turn_seconds": [round(turn_seconds(t), 3) for t in record.turns],
         "agent_turns": len(traces), "fallback_turns": sum(1 for t in traces if t["fallback"]),
         "recorded": {"name": m.get("name"), "number": m.get("number"), "reason": m.get("reason")},
@@ -120,8 +124,8 @@ def score_call(card: Card, record, pattern: re.Pattern, hand: handoff.HandOff | 
         want_push = card.labels.category == "urgent"
         score["handoff"] = {"route": hand.decision.route, "notify": hand.decision.notify, "review": hand.decision.review,
                             "category": hand.result.analysis.category, "category_ok": hand.result.analysis.category == card.labels.category,
-                            "pushes_sent": pushes, "missed_push": want_push and not hand.decision.notify,
-                            "false_push": hand.decision.notify and not want_push}
+                            "pushes_sent": pushes, "missed_push": want_push and pushes == 0,
+                            "false_push": pushes > 0 and not want_push}  # pushes = what was really sent: live during the call or at hand-off
     return score
 
 
@@ -171,6 +175,8 @@ def summarize(scores: list[dict], audio: bool = False) -> dict:
         "fallback_share": (sum(sc["fallback_turns"] for sc in scores) / agent_turns) if agent_turns else None,
         "handoff_calls": len(hands), "missed_push": sum(h["missed_push"] for h in hands), "false_push": sum(h["false_push"] for h in hands),
         "category_ok": sum(h["category_ok"] for h in hands),
+        "understand_fallbacks": sum(sc["understand_fallbacks"] for sc in scores),
+        "analysis_fallbacks": sum(sc["analysis_fallback"] for sc in scores),
         "completed_calls": sum(sc["outcome"] == "completed" for sc in scores),
     }
 
@@ -199,13 +205,15 @@ def dod_table(s: dict) -> list[tuple[str, str, str]]:
          pct(s["name_correct"], s["calls"])),
         ("0 invented numbers", check(s["invented_numbers"] == 0), str(s["invented_numbers"])),
         ("Every urgent caller flagged during the call (0 missed)", check(s["missed_urgent"] == 0), f"missed {s['missed_urgent']}"),
-        ("A push for every urgent call (and none for others)", check(s["missed_push"] == 0 and s["false_push"] == 0),
-         f"missed {s['missed_push']}, false {s['false_push']}"),
+        ("A push for every urgent call (and none for others)",
+         check(s["missed_push"] == 0 and s["false_push"] == 0) if s["handoff_calls"] == s["calls"] else "NOT MEASURED",
+         f"missed {s['missed_push']}, false {s['false_push']}" if s["handoff_calls"] == s["calls"] else "needs the hand-off for every call"),
         (f"FAQ questions answered right >= {DOD_PERCENT} %", check(share(s["faq_ok"], s["faq_cards"]) >= DOD_PERCENT),
          f"{s['faq_ok']}/{s['faq_cards']}"),
         ("0 answers that are not in the FAQ", check(s["non_approved_replies"] == 0 and s["faq_extra_answers"] == 0),
          f"non-approved replies {s['non_approved_replies']}, unexpected answers {s['faq_extra_answers']}"),
-        ("Every completed call lands in voicemails.db", check(s["handoff_calls"] == s["calls"]), f"{s['handoff_calls']}/{s['calls']} handed off"),
+        ("Every call can be handed to Part 1's table (tried on an in-memory copy)", check(s["handoff_calls"] == s["calls"]),
+         f"{s['handoff_calls']}/{s['calls']} handed off"),
     ]
     if s["audio"] and s["latency_p50"] is not None:
         rows.append((f"Median reply <= {TARGET_TURN_SECONDS:g} s", check(s["latency_p50"] <= TARGET_TURN_SECONDS), f"{s['latency_p50']:.2f} s"))
@@ -233,11 +241,12 @@ def decide_ab(a_runs: list[dict], b: dict) -> dict:
     noise = abs(a_runs[0]["details_correct"] - a_runs[1]["details_correct"]) if len(a_runs) > 1 else None
     noisy = noise is not None and margin >= MIN_EXTRA_DETAILS and noise >= margin
     reasons.append(("4. Noise: A's two runs differ by less than B's margin", noise is not None and not noisy,
-                    "A was run once: no noise estimate, so the rule cannot be applied" if noise is None else f"A's runs differ by {noise}"))
-    if all(ok for _, ok, _ in reasons):
+                    "A was run once: no noise estimate, so the rule cannot be applied (B cannot win)" if noise is None else f"A's runs differ by {noise}"))
+    failed = [r for r, ok, _ in reasons if not ok]
+    if not failed:
         verdict = "B replaces A"
-    elif noise is None or noisy:
-        verdict = "inconclusive, A stays" if (gates and margin >= MIN_EXTRA_DETAILS) else "A stays"
+    elif len(failed) == 1 and failed[0].startswith("4."):
+        verdict = "inconclusive, A stays"   # B passed everything except the noise check
     else:
         verdict = "A stays"
     return {"verdict": verdict, "rules": [{"rule": r, "ok": ok, "evidence": e} for r, ok, e in reasons]}
@@ -256,6 +265,7 @@ def summary_markdown(label: str, s: dict) -> str:
              f"- invented numbers {s['invented_numbers']}; missed urgent {s['missed_urgent']}; false urgent {s['false_urgent']}",
              f"- FAQ cards right {s['faq_ok']}/{s['faq_cards']}; unexpected answers {s['faq_extra_answers']}; non-approved replies {s['non_approved_replies']}",
              f"- hand-off: category right {s['category_ok']}/{s['handoff_calls']}, missed push {s['missed_push']}, false push {s['false_push']}",
+             f"- model failures that fell back to plain code: understanding {s['understand_fallbacks']} turns, hand-off analysis {s['analysis_fallbacks']} calls",
              f"- time per reply: median {fmt(s['latency_p50'])} s, p95 {fmt(s['latency_p95'])} s"
              + ("" if s["audio"] else " (text run: no listening or speaking time)"),
              f"- agent fallbacks: {s['fallback_turns']}/{s['agent_turns']} turns" if s["agent_turns"] else "", ""]
@@ -266,13 +276,15 @@ def results_markdown(meta: dict, summaries: dict[str, dict], verdict: dict | Non
     out = ["# Part 3 evaluation results", "",
            f"Run {meta['when']}: split `{meta['split']}`, {meta['calls']} caller cards, understanding = `{meta['understand']}`"
            f"{' (' + meta['models'] + ')' if meta.get('models') else ''}, mode = {'audio' if meta['audio'] else 'text'}.", ""]
+    if meta.get("invalid"):
+        out += [f"> **INVALID RUN.** {meta['invalid']}", ""]
     if meta["understand"] == "rules":
         out += ["> **Harness check only.** This run used the plain-code baseline instead of the model (and the caller cards it was built on), so",
                 "> none of these numbers say anything about the real receptionist. They are never written to the results file.", ""]
     for label, s in summaries.items():
         out.append(summary_markdown(label, s))
     main = summaries.get("A") or next(iter(summaries.values()))
-    out += ["## Definition of done (run of the chosen default)", "", "| Criterion | Result | Evidence |", "|---|---|---|"]
+    out += [f"## Definition of done (version {'A' if 'A' in summaries else 'B'}, the run scored here)", "", "| Criterion | Result | Evidence |", "|---|---|---|"]
     out += [f"| {c} | {r} | {e} |" for c, r, e in dod_table(main)]
     if verdict:
         out += ["", f"## A or B? **{verdict['verdict']}**", "", "| Rule | Met | Evidence |", "|---|---|---|"]
@@ -292,7 +304,7 @@ To produce the numbers, on the laptop (after the speed measurements and the voic
 
 ```powershell
 python 03-phone-receptionist\\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs
-python 03-phone-receptionist\\evaluate.py --split score --understand model --decide a --audio --write-docs   # adds the real speed (audio) run
+python 03-phone-receptionist\\evaluate.py --split score --understand model --decide a --audio --write-docs   # the real speed; writes part3-eval-results-audio.md (the file above keeps the A-vs-B report)
 ```
 
 The command rewrites this file with the counts per version, the definition-of-done table (PASS / FAIL / NOT MEASURED) and the
@@ -302,6 +314,15 @@ Tune prompts only on the `dev` cards (`--split dev`); the `score` cards are for 
 
 
 # ---------------------------------------------------------------- command line
+
+def has_voice(persona: Persona) -> bool:
+    from persona import PersonaError, speaker_id
+    try:
+        speaker_id(persona)
+        return True
+    except PersonaError:
+        return False
+
 
 def build_understand(kind: str):
     from turn import PROMPT_VERSION, Understanding, understand
@@ -327,19 +348,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repeat-a", type=int, default=2, help="how many times version A is run (2 = the noise check of rule 4)")
     parser.add_argument("--audio", action="store_true", help="speak and listen for real (Piper + Whisper): laptop only")
     parser.add_argument("--no-handoff", action="store_true", help="skip the hand-off into an in-memory copy of Part 1's table")
-    parser.add_argument("--write-docs", action="store_true", help="write docs/part3-eval-results.md (only after a --understand model run)")
+    parser.add_argument("--write-docs", action="store_true",
+                        help="write docs/part3-eval-results.md (or ...-audio.md for --audio): only a valid model run on the score cards")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
 
     persona, faq, cards = load_persona(), load_faq(), choose_cards(args.split)
     understand_fn, label, version = build_understand(args.understand)
+    audio = args.audio and has_voice(persona)
+    if args.audio and not audio:
+        print("(no receptionist voice chosen: replies stay text, so this run is not counted as an audio run)")
     runs: dict[str, list[dict]] = {}
     summaries: dict[str, dict] = {}
 
     def one_run(decide_label: str, make_decide) -> dict:
         scores = run_set(cards, persona, faq, understand_fn, decide_label, make_decide, label, version, audio=args.audio,
                          with_handoff=not args.no_handoff)
-        runs.setdefault(decide_label, []).append({"scores": scores, "summary": summarize(scores, args.audio)})
+        runs.setdefault(decide_label, []).append({"scores": scores, "summary": summarize(scores, audio)})
         return runs[decide_label][-1]["summary"]
 
     if args.decide in ("a", "both"):
@@ -351,7 +376,11 @@ def main(argv: list[str] | None = None) -> int:
     verdict = decide_ab([r["summary"] for r in runs["a"]], summaries["B"]) if args.decide == "both" else None
 
     when = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    meta = {"when": when, "split": args.split, "calls": len(cards), "understand": label, "audio": args.audio}
+    meta = {"when": when, "split": args.split, "calls": len(cards), "understand": label, "audio": audio}
+    failures = [f"{k}: {v}" for k, v in (("understanding turns that fell back to plain code", sum(x["summary"]["understand_fallbacks"] for r in runs.values() for x in r)),
+                                           ("hand-off analyses that fell back to plain code", sum(x["summary"]["analysis_fallbacks"] for r in runs.values() for x in r))) if v]
+    if args.understand == "model" and failures:
+        meta["invalid"] = "The model failed during this run (is Ollama running?), so some numbers are the plain-code baseline's: " + "; ".join(failures)
     if args.understand == "model":
         from shared.llm import settings
         meta["models"] = f"LLM {settings()['model']}"
@@ -362,11 +391,16 @@ def main(argv: list[str] | None = None) -> int:
     path.write_text(json.dumps({"meta": meta, "runs": runs, "verdict": verdict}, indent=2, ensure_ascii=False), encoding="utf-8")
     print("details saved to", path)
     if args.write_docs:
+        target = AUDIO_RESULTS_FILE if args.audio else RESULTS_FILE
         if args.understand != "model":
-            print("NOT written to docs/part3-eval-results.md: a run without a model only tests the harness.")
+            print("NOT written to the docs: a run without a model only tests the harness.")
+        elif meta.get("invalid"):
+            print("NOT written to the docs: the run is invalid (see the banner).")
+        elif args.split != "score" or not (args.audio or args.decide == "both"):
+            print("NOT written to the docs: the results file is for `--split score --decide both` (or an `--audio` run on the score cards).")
         else:
-            RESULTS_FILE.write_text(report, encoding="utf-8")
-            print("wrote", RESULTS_FILE)
+            target.write_text(report, encoding="utf-8")
+            print("wrote", target)
     return 0
 
 

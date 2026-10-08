@@ -155,3 +155,49 @@ def test_both_versions_give_a_verdict_and_the_model_flag_decides_whether_docs_ar
     assert evaluate.main(["--split", "f0", "--understand", "rules", "--decide", "both", "--repeat-a", "2"]) == 0
     out = capsys.readouterr().out
     assert "A or B?" in out and "A stays" in out
+
+
+# ---------------------------------------------------------------- review fixes
+
+def test_noise_plus_a_failed_cost_rule_is_a_plain_a_stays_not_inconclusive():
+    a = [summary(details_correct=20), summary(details_correct=23)]
+    verdict = evaluate.decide_ab(a, summary(details_correct=23, latency_p50=9.0))
+    assert verdict["verdict"] == "A stays"
+
+
+def test_pushes_are_counted_from_what_was_really_sent_not_from_the_routing_decision():
+    card = next(c for c in load_cards() if c.id.startswith("c07"))     # not urgent
+    from call import run_call
+    rec = run_call(card, P, FAQ, UNDERSTAND)
+    hand = NS(decision=NS(route="x", notify=False, review=False), result=NS(analysis=NS(category="personal")))
+    sc = evaluate.score_call(card, rec, evaluate.approved_pattern(P, FAQ), hand, pushes=1)
+    assert sc["handoff"]["false_push"] is True
+
+
+def test_the_push_row_is_not_measured_without_a_hand_off():
+    rows = {c: r for c, r, _ in evaluate.dod_table(summary(handoff_calls=0))}
+    assert rows["A push for every urgent call (and none for others)"] == "NOT MEASURED"
+
+
+def test_an_unexpected_faq_answer_makes_the_card_wrong():
+    card = next(c for c in load_cards() if c.id.startswith("f03"))
+    from call import run_call
+    rec = run_call(card, P, FAQ, UNDERSTAND)
+    rec.message["faq_answered"] = rec.message["faq_answered"] + ["payment"]
+    assert evaluate.score_call(card, rec, evaluate.approved_pattern(P, FAQ))["faq_ok"] is False
+
+
+def test_a_model_run_where_the_model_failed_is_invalid_and_never_written(tmp_path, monkeypatch, capsys):
+    import turn
+    monkeypatch.setattr(evaluate, "RESULTS_FILE", tmp_path / "results.md")
+    monkeypatch.setattr(evaluate, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(evaluate, "build_understand",
+                        lambda kind: ((lambda text, ctx: Understanding(rules_understand(text, ctx), fallback=True)), "model", "t1"))
+    monkeypatch.setattr(evaluate.handoff, "analysis_for_call", evaluate.handoff.analysis_for_call)
+    assert evaluate.main(["--split", "score", "--understand", "model", "--decide", "a", "--repeat-a", "1", "--no-handoff", "--write-docs"]) == 0
+    out = capsys.readouterr().out
+    assert "INVALID RUN" in out and not (tmp_path / "results.md").exists()
+
+
+def test_the_audio_run_has_its_own_results_file():
+    assert evaluate.AUDIO_RESULTS_FILE != evaluate.RESULTS_FILE

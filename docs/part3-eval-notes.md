@@ -9,6 +9,8 @@ python 03-phone-receptionist\evaluate.py --split score --understand model --deci
 python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs
 ```
 
+`--write-docs` is refused for a run without a model, an invalid run (the model failed and plain code filled in: the report says so), or anything but the score cards. The audio run writes its own file, `docs/part3-eval-results-audio.md`, so it never overwrites the A-vs-B report. With one A run (`--repeat-a 1`) rule 4 cannot be applied and B cannot win.
+
 `--split dev` is for tuning prompts and rules; `--split score` is for the evaluation (the 15 cards nobody tuned on). `--understand rules` uses the
 plain-code baseline: it only checks that the harness works and never writes the results file. Each run saves per-call details as JSON in
 `03-phone-receptionist/logs/` (git-ignored).
@@ -20,7 +22,7 @@ plain-code baseline: it only checks that the harness works and never writes the 
 | name / number | `null_aware`: correct, wrong, missed (said but not found), invented (not said but recorded). Numbers are compared as digits. A caller who gives no number must end with no number. |
 | invented number | the recorded number is not made of digits the caller said, in order. Must be 0. |
 | urgent | flagged during the call or not: missed (should be flagged, was not) and false (the opposite). |
-| FAQ | the expected topics were answered (a gas, carbon monoxide or water emergency counts as the matching safety topic), nothing else was answered, and an unknown question was passed on. |
+| FAQ | the expected topics were answered (a gas, carbon monoxide or water emergency counts as the matching safety topic), nothing else was answered (an unexpected answer makes the card wrong), and an unknown question was passed on. |
 | sentences | every reply is made only of `persona.json` lines and `faq.json` answers (placeholders may be anything). |
 | outcome | the call ended as the card expects (completed, spam, info only). |
 | time per reply | understand + decide in a text run; plus listening and speaking in an audio run. Median and p95. |

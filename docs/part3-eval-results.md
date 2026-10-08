@@ -8,7 +8,7 @@ To produce the numbers, on the laptop (after the speed measurements and the voic
 
 ```powershell
 python 03-phone-receptionist\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs
-python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs   # adds the real speed (audio) run
+python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs   # the real speed; writes part3-eval-results-audio.md (the file above keeps the A-vs-B report)
 ```
 
 The command rewrites this file with the counts per version, the definition-of-done table (PASS / FAIL / NOT MEASURED) and the

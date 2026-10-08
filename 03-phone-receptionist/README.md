@@ -95,7 +95,6 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 41 | No tool takes a value | The agent cannot name, number or reason anything: those come from `apply_turn`, grounded in the caller's words. A test checks no tool has such a field. | "Values copied by code" from Part 2. |
 | 42 | Fallback | If the agent fails (model error, prose instead of tools, step limit 4, no progress, only illegal choices) the state machine's own decision is used and the turn is logged `fallback: true` with the reason. The evaluation counts fallbacks (pre-registered rule: at most 10 % of turns). | A call never depends on the model behaving. |
 | 43 | `flag_urgent` | The agent may flag a call urgent that the safety words missed (once; refused if already flagged). The acknowledgement and the urgent goodbye follow even if the agent then fails. The code-side safety floor (acknowledgement, advice, "I'll pass your question on") is said whatever the agent does. | |
-
 | 44 | Which calls are scored | The `score` split by default (the 15 cards nobody tuned on); `--split dev` for tuning. Results are only written to the docs after a run with a real model. | The plan's rule: never tune on the cards used for scoring. |
 | 45 | What counts as a correct detail | Name or number "correct" in the null-aware sense: a caller who gives none must end with none (numbers compared as digits). The A-vs-B quality margin counts name-correct + number-correct over all scored cards. | Decision 13 and the pre-registered rule. |
 | 46 | Hand-off inside the evaluation | Every evaluated call is handed to Part 1 in an in-memory table with a recording sender: nothing touches `voicemails.db` or the phone. The push check compares with the card's Part 1 label (urgent = pushed, nothing else pushed). | Definition of done: urgent calls pushed, completed calls land in the table. |
@@ -129,7 +128,7 @@ default only if **all** of these hold; otherwise A stays (ties go to A: simpler,
 1. Safety gates: B has 0 invented numbers, 0 missed urgent callers, and 0 spoken sentences that are not from `persona.json`/`faq.json`.
 2. Quality: B gets at least **2 more** correct details (name correct + number correct, counted over all score cards) than A.
 3. Cost: B's median reply latency is at most A's + 3 s, and B's fallbacks to the state machine are at most 10 % of its turns.
-4. Noise: A is run twice; if A's two runs differ by at least B's margin in rule 2, the result is "inconclusive" and A stays.
+4. Noise: A is run twice; if A's two runs differ by at least B's margin in rule 2, the result is "inconclusive" and A stays ("inconclusive" = the noise check was the only rule that failed). With a single A run the noise cannot be estimated, so B cannot win.
 
 **Speed defaults (Phase 2).** Per turn = listen + understand + speak. Pick the *smallest* Whisper model (`base` before `small`)
 whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.5:7b` if its median understand time on the GPU is
@@ -200,7 +199,7 @@ python -m streamlit run 03-phone-receptionist\app.py   # push-to-talk page (the 
 
 # Phase 6: the evaluation (needs Ollama; the audio run also Whisper + Piper). Rewrites docs\part3-eval-results.md
 python 03-phone-receptionist\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs
-python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs     # the real speed (median reply <= 5 s)
+python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs     # the real speed (median reply <= 5 s); writes part3-eval-results-audio.md
 ```
 Later phases add their own commands here.
 

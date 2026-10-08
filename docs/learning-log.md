@@ -1928,7 +1928,7 @@ python 03-phone-receptionist\evaluate.py --split score --understand model --deci
 Expected: the tests pass; the first command prints a "Harness check only" report; the last one rewrites `docs\part3-eval-results.md`.
 
 ### 7. What can go wrong
-- The "approved sentence" check lets placeholders match anything, so it proves no sentence outside the approved set, not that a placeholder value is right (the invented-number and name checks cover values).
+- The "approved sentence" check lets placeholders match anything, so it shows every reply is built from approved sentences, not that a placeholder value is right (the invented-number and name checks cover values).
 - 15 score cards is a small set: a difference of one or two calls is within noise; that is why rule 4 exists.
 - Audio runs depend on Whisper's transcription of the caller voices; a low score can be the ear, not the dialog (the log keeps what was heard).
 
