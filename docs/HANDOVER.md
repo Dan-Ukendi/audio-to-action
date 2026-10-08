@@ -16,7 +16,7 @@ understanding over speed. Everything runs **locally and for free**.
   audio → transcribe → analyze (LLM fills a schema) → route (plain-code rules) → notify/store.
 - **Part 2, `02-meeting-action-agent/` (DONE, see §12):** meeting recordings → action items (workflow) → a task
   tracker synced across meetings by a bounded agent (or plain-code rules).
-- **Part 3, `03-phone-receptionist/` (in progress; Phase 0 built, owner confirmation pending):** real-time AI phone receptionist ("Holly"). Local
+- **Part 3, `03-phone-receptionist/` (built and tested without models; laptop runs pending, see §13):** real-time AI phone receptionist ("Holly"). Local
   simulation (browser push-to-talk or a scripted synthetic caller, no telephony provider); job = take a message
   (reason, name, number, urgency) and answer simple questions from `faq.json`, then hand the message to the Part 1
   pipeline. State machine first, tool-calling agent second, measured. Plan: `docs/PART3_PLAN.md`; decisions and status:
@@ -484,7 +484,7 @@ set. Saved agent runs predate the last agent fix (not_work for cancelled ideas).
 2. Improve extraction first (it caps the sync at 9/14): turbo transcripts; more and real (consented) meetings.
 3. Try a hybrid sync: rules first, the agent only for items no rule matches confidently.
 4. Re-run the agent series twice with the current `agent.py` to measure its noise; add the 9/14 oracle to evaluate.py.
-5. Part 3 (receptionist): in progress; plan in `docs/PART3_PLAN.md`, build notes in `03-phone-receptionist/README.md`.
+5. Part 3 (receptionist): built, laptop runs pending; see §13.
 
 ### 12.10 How to run (Part 2)
 ```powershell
@@ -502,3 +502,35 @@ python 02-meeting-action-agent\testset\generate.py [--only m3]     # DON'T once 
 ```
 Caches are found by hashing the (git-ignored) audio in `testset/audio/`, so those files must exist locally. ffmpeg is
 needed only when a transcript cache is missing; a missing x7 extraction cache makes `evaluate.py` call the LLM.
+
+## 13. Part 3: phone-receptionist (built and tested without models)
+
+**Status in one line:** everything is built and the test suite passes in the cloud, but nothing has met a real model, a microphone or the laptop's GPU.
+No speed number and no evaluation number exists. Plan: `docs/PART3_PLAN.md`; every decision taken without the owner: `03-phone-receptionist/README.md` (table); per-phase recaps: `docs/learning-log.md`.
+
+### 13.1 What it is
+"Holly" answers a call for the fictional Brightwater Plumbing & Heating: listen, understand, decide, speak, hand off. The caller is a
+browser (push-to-talk page) or a simulated caller card. Every sentence she says is fixed text from `persona.json` / `faq.json`; models only
+fill a form (understanding) or choose the next legal action (version B). Names and numbers must be words/digits the caller said.
+
+### 13.2 Documents against code
+| Document says | Code that does it |
+|---|---|
+| Never invent a name/number/reason | `dialog.apply_turn` + grounding in `turn.py` / `spoken.py`; checked in the evaluation (`invented_number`) |
+| Emergency fast path | `safety.py` (Part 1's `SAFETY_PATTERNS`) or the model's flag; `dialog.decide_a` |
+| FAQ only from `faq.json` | `faq.py` matching + `dialog.render`; `evaluate.approved_pattern` checks every reply |
+| Limits 12 turns / 2 re-asks / 2 silent turns | `persona.json` limits, `dialog.apply_limits`, `next_reply` |
+| Version B is boxed | `agent_dialog.py`: tools take no values, legality from the state, fallback to version A, trace in the call record |
+| Hand-off to Part 1 | `handoff.py` (`call-v1` prompt in `shared/analyze.py`, Part 1's `route()` and `store.save()`) |
+| A-vs-B rule written before any run | README §4, `evaluate.decide_ab` and its constants (a test compares them) |
+
+### 13.3 Not done / not true yet
+- No Whisper, Ollama or Piper run: prompts (`t1` understanding, `call-v1` analysis, the agent prompt) are untested on a real model. Tune only on `--card dev`.
+- Speed budget and evaluation numbers: `docs/part3-speed.md` and `docs/part3-eval-results.md` are placeholders ("NOT MEASURED").
+- Owner has not confirmed Holly's wording or the FAQ facts; the laptop GPU check is pending.
+- Phase 3's third review round was not repeated after its last fixes (round limit); recorded in the learning log.
+- The page does not hand a finished call to Part 1.
+
+### 13.4 Run order on the laptop
+`README.md` in `03-phone-receptionist/`, section 8, is the ordered command list (pull the branch, install, GPU check, tests, voice choice,
+speed measurements, dev-card calls with the model, hand-off, evaluation on the score cards, page).

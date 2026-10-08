@@ -1939,3 +1939,49 @@ Expected: the tests pass; the first command prints a "Harness check only" report
 
 ### 9. Next phase preview
 Phase 7 wires the Streamlit receptionist page to the real dialog, polishes the README, writes HANDOVER section 13 (documents against code) and has a final reviewer check every claim.
+
+## Part 3, Phase 7: Polish (2026-10-08)
+
+### 1. What we built
+The push-to-talk page now runs the real receptionist (version A or B, understanding by model or by the no-model rules), with a side panel of
+what has been understood so far. README status lines, the root README and `docs/HANDOVER.md` section 13 (documents against code, what is not
+done, run order) were brought in line with the code.
+
+### 2. Where it fits in the pipeline
+```
+ browser microphone ─► AudioSession ─► Whisper ─► dialog_responder ─► dialog.next_reply (A or B) ─► Piper ─► browser
+ [Phase 7: session.dialog_responder, app.py]  <-- you are here
+```
+
+### 3. How it works, step by step
+- `session.dialog_responder()` owns one call state; an ignored turn (silence) reaches the dialog as an empty turn, so the silence rules apply.
+- `app.py` builds the responder from the sidebar choices; the side panel reads `responder.state`; a finished call shows its outcome.
+- The page does not hand the call to Part 1; `call.py --save` and `handoff.py` do.
+
+### 4. Key concepts I should understand
+- **Thin shell:** the page only wires; every rule is in tested modules.
+- **Documents against code:** HANDOVER 13.2 maps each promise to the code and the test that keeps it true.
+- **Honest status:** "built and tested" is not "measured"; the docs say which numbers do not exist yet.
+
+### 5. Files created or changed
+- Changed: `session.py`, `app.py`, `tests/test_session.py`, `tests/test_app.py`, README files, `docs/HANDOVER.md`. Removed: the unused `03-phone-receptionist/.gitkeep`.
+
+### 6. Try it yourself
+```powershell
+python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests 03-phone-receptionist\tests -q
+python -m streamlit run 03-phone-receptionist\app.py      # choose Understanding "rules" to try it without Ollama
+```
+Expected: all tests pass; the page greets, listens, answers, and the side panel fills in as you give your reason, name and number.
+
+### 7. What can go wrong
+- With "model" understanding and Ollama not running, the first turn raises an error: start Ollama or pick "rules".
+- Whisper mishearing a number gives a wrong read-back: say "no, the number is wrong" and give it again.
+- No chosen voice: replies are text only and the wait shown is too short.
+
+### 8. Check my understanding
+1. Why does an ignored recording go to the dialog as silence instead of being dropped?
+2. Which document line would you check first if the code changed a limit?
+3. Which numbers in this repo are still missing, and which command produces each?
+
+### 9. Next phase preview
+Part 3 is complete in code. Next: the laptop runs in README section 8, then the owner's review and merge.

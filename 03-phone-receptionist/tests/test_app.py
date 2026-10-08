@@ -32,3 +32,13 @@ def test_starting_a_call_shows_the_greeting(monkeypatch):
     assert [m.name for m in at.chat_message] == ["assistant"]
     text = " ".join(e.value for e in at.markdown)
     assert "This is Holly, the automated assistant" in text and "This call is recorded" in text
+
+
+def test_the_sidebar_offers_understanding_and_decision_and_shows_what_was_understood(monkeypatch):
+    monkeypatch.delenv("RECEPTIONIST_SPEAKER", raising=False)
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    assert [s.label for s in at.sidebar.selectbox][-2:] == ["Understanding", "Decision"]
+    at.button[0].click().run()
+    assert not at.exception
+    side = " ".join(e.value for e in at.sidebar.markdown)
+    assert "Understood so far" in " ".join(e.value for e in at.sidebar.subheader) and "reason" in side

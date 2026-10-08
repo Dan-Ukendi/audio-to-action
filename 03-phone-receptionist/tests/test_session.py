@@ -9,7 +9,7 @@ sys.path.insert(0, str(HERE.parent))
 
 from audio_io import Heard  # noqa: E402
 from persona import load_persona  # noqa: E402
-from session import AudioSession, scripted_responder  # noqa: E402
+from session import AudioSession, dialog_responder, scripted_responder  # noqa: E402
 from test_audio_io import fake_synth  # noqa: E402
 
 
@@ -69,3 +69,19 @@ def test_an_ignored_turn_is_recorded_with_its_reason(tmp_path):
     s.greet("Hello.")
     turn = s.hear(b"x")
     assert turn.ignored and turn.ignored_why == "silence" and turn.caller_text == "" and turn.raw_text == "Thank you."
+
+
+def test_the_real_dialog_answers_through_the_audio_session_and_ignored_turns_are_silence(tmp_path):
+    from faq import load_faq
+    from rules_turn import rules_understand
+    from turn import Understanding
+    persona = load_persona()
+    respond = dialog_responder(persona, load_faq(), lambda text, ctx: Understanding(rules_understand(text, ctx)))
+    queue = [make_heard("My tap is dripping. I'm Dave. My number is 01632 960 501."), make_heard("", ignored=True)]
+    s = AudioSession(respond, tmp_path / "call", hint=None, speaker=None, listen_fn=lambda a, hint=None, model=None: queue.pop(0))
+    s.greet(respond.greeting)
+    first = s.hear(b"x")
+    assert first.reply_text.startswith("Let me read that back") or "dripping" in first.reply_text
+    assert respond.state.value("name") == "Dave" and respond.state.value("number") == "01632960501"
+    second = s.hear(b"x")
+    assert second.reply_text == persona.say("repeat_request") and respond.state.silent_streak == 1

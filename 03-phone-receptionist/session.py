@@ -5,9 +5,8 @@
     turn = session.hear(wav_bytes)               # one push-to-talk recording from the caller
 
 All logic lives here, none in the Streamlit page (app.py), so the page stays a thin shell and this file is tested
-without a browser. `respond(text, heard)` is where the dialog engine plugs in; until Phase 3 the page uses
-scripted_responder(), which says a fixed sequence of persona lines whatever the caller said: enough to measure
-the audio loop's speed and to check what Whisper heard, and honest about not being a conversation yet.
+without a browser. `respond(text, heard)` is where the dialog engine plugs in: dialog_responder() is the real
+receptionist; scripted_responder() (fixed persona lines whatever the caller said) is kept for measuring the audio loop alone.
 """
 
 import sys
@@ -18,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
+import dialog  # noqa: E402
 from audio_io import Heard, listen, speak, wav_seconds  # noqa: E402
 from audio_loop import Timing, process_turn  # noqa: E402
 from persona import Persona  # noqa: E402
@@ -88,4 +88,17 @@ def scripted_responder(persona: Persona):
         state["i"] += 1
         return reply
 
+    return respond
+
+
+def dialog_responder(persona: Persona, faq, understand_fn, decide_fn=dialog.decide_a):
+    """The real receptionist behind the page. `respond.state` is the call state (for the page's side panel)."""
+    greeting, state = dialog.start_call(persona)
+
+    def respond(text: str, heard: Heard) -> str:
+        # A turn Whisper ignored (silence, noise) reaches the dialog as silence: it asks again, and ends after two in a row.
+        reply, _ = dialog.next_reply(state, "" if heard.ignored else text, persona, faq, understand_fn, decide_fn, heard=heard)
+        return reply
+
+    respond.state, respond.greeting = state, greeting
     return respond
