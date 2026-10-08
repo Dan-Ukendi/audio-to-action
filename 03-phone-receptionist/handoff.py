@@ -175,7 +175,8 @@ class LivePush:
 
     It runs in a BACKGROUND thread, one attempt: a slow ntfy server (send_push waits up to 10 s) must never make the caller hear
     silence in an emergency. Minimal text, no caller data (Part 1's rule). It never raises: a push that fails must not end the
-    call; hand_off() then sends the push at the end, with Part 1's retries. `status` is "sent" or "dry_run" (nothing is sent until
+    call; hand_off() then sends the push at the end, with Part 1's retries. (If the background push is still running when hand_off()
+    stops waiting, 15 s, the end push goes out as well and the phone may ring twice: the safe direction, never zero.) `status` is "sent" or "dry_run" (nothing is sent until
     NTFY is configured) once wait() has returned."""
 
     def __init__(self, sender=send_push):
@@ -218,7 +219,10 @@ class HandOff:
 
 def hand_off(record, conn: sqlite3.Connection, analyze_fn=None, live: LivePush | None = None, sender=send_push,
              use_model: bool = True) -> HandOff:
-    """Analyze, route, push if needed and save one finished call. Handing the same call off again changes nothing."""
+    """Analyze, route, push if needed and save one finished call.
+
+    Handing the same call off again refreshes its row (analysis, route) but never adds a row or a second push, unless the first
+    hand-off did not push and this one finds urgency."""
     transcript = call_transcript(record)
     result = analysis_for_call(record, transcript, analyze_fn, use_model)
     decision = route(transcript, result)
@@ -250,7 +254,8 @@ def hand_off(record, conn: sqlite3.Connection, analyze_fn=None, live: LivePush |
     record.handoff = {"source_file": transcript.source_file, "audio_sha256": transcript.audio_sha256, "route": decision.route,
                       "notify": decision.notify, "review": decision.review, "reasons": decision.reasons, "pushed": pushed,
                       "category": result.analysis.category, "urgency": result.analysis.urgency, "llm_model": result.llm_model,
-                      "prompt_version": result.prompt_version, "attempts": result.attempts}
+                      "prompt_version": result.prompt_version, "attempts": result.attempts,
+                      "live_push": None if live is None else {"status": live.status, "error": live.error}}
     return HandOff(transcript, result, decision, pushed, notified_at)
 
 
@@ -276,7 +281,9 @@ def expand(patterns: list[str]) -> list[Path]:
     found: list[Path] = []
     for pattern in patterns:
         matches = sorted(glob.glob(pattern)) or ([pattern] if Path(pattern).exists() else [])
-        found += [Path(m) for m in matches if not m.endswith(".tmp")]
+        for m in matches:
+            if Path(m).is_file() and not m.endswith(".tmp") and Path(m) not in found:  # files only, each once
+                found.append(Path(m))
     return found
 
 

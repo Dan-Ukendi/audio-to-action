@@ -1800,7 +1800,7 @@ decides what happens, an urgent call is pushed (a dry run until NTFY is configur
 - `analysis_for_call()`: robocalls, info-only and silent calls get an analysis from plain code. Others go to `analyze(..., prompt_version="call-v1")`; then `merge_model_analysis()` puts the dialog's checked name and number over the model's and keeps an urgent call urgent. If the model fails, plain code builds it and the row is flagged for review.
 - `route()` (Part 1, unchanged) decides notify / inbox / archive and the review flags; `hand_off()` adds a reason line ("phone call, outcome ..., flagged urgent in turn 1").
 - `LivePush` sends the minimal "Urgent call in progress" push the moment `run_call` flags the call, in a background thread so the caller never waits; `hand_off()` waits for it and does not push twice. Push first, save second (Part 1's at-least-once order).
-- `save()` (Part 1) upserts by a hash of the call: handing the same call off again changes nothing.
+- `save()` (Part 1) upserts by a hash of the call: handing the same call off again refreshes the row but never adds a row or a second push.
 
 ### 4. Key concepts I should understand
 - **Reuse, don't copy:** routing, safety words, push text, retries and storage are Part 1's own functions; a call and a voicemail cannot disagree about what is urgent.
@@ -1809,7 +1809,8 @@ decides what happens, an urgent call is pushed (a dry run until NTFY is configur
 - **Idempotency is a hash:** same call, same row, no second push (a re-run refreshes the row but pushes only if the first run did not).
 
 ### 5. Files created or changed
-- New: `handoff.py`, `tests/test_handoff.py`. Changed: `shared/analyze.py` (a new prompt version `call-v1` and the user-message label; v2/v3 untouched), `call.py` (`CallRecord.handoff`).
+- New: `handoff.py`, `tests/test_handoff.py`. Changed: `shared/analyze.py` (a new prompt version `call-v1` and the user-message label; v2/v3 untouched), `call.py` (`CallRecord.handoff`, `save_record(name=)`, logging in the command line).
+- Review record: round 1 FAIL (6: a re-run could store an urgent call without ever pushing it, a message ending in silence was summarised as "said nothing", the info-only override wiped other review flags, a failed push lost the call record, `*.json` did not work on Windows, the live push could stall the call), round 2 FAIL (3 small: a test racing the push thread, a "never twice" claim, two stale sentences); all fixed.
 
 ### 6. Try it yourself
 ```powershell

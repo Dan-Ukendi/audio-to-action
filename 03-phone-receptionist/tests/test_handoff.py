@@ -213,6 +213,7 @@ def test_a_failed_live_push_does_not_end_the_call_and_the_push_is_sent_at_the_en
 
     live = handoff.LivePush(down)
     record = call_module.run_call(CARDS["c03"], P, FAQ, UNDERSTAND, on_urgent=live, understand_label="rules")
+    live.wait()  # the push runs in the background: wait for it before looking at the result
     assert record.outcome == "completed" and live.status is None and "ntfy unreachable" in live.error
     conn, sender = store.connect(":memory:"), Sender()
     outcome = handoff.hand_off(record, conn, use_model=False, live=live, sender=sender)
@@ -396,3 +397,45 @@ def test_a_live_push_that_is_still_running_when_waited_on_counts_as_failed():
     live.wait(timeout=0.05)
     assert live.status is None and "still sending" in live.error
     block.set()
+
+
+def test_a_hand_off_remembers_whether_the_live_push_worked():
+    record, outcome, _, _ = call("c03", use_model=False)
+    assert record.handoff["live_push"] == {"status": "dry_run", "error": None}
+    record, outcome, _, _ = call("c14", use_model=False)
+    assert record.handoff["live_push"]["status"] is None  # no urgent flag: no live push
+
+
+def test_expand_keeps_files_only_and_each_file_once(tmp_path):
+    (tmp_path / "a.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    found = handoff.expand([str(tmp_path / "*"), str(tmp_path / "a.json"), str(tmp_path / "*.json")])
+    assert found == [tmp_path / "a.json"]
+
+
+def test_every_review_reason_part_1_can_give_is_one_the_handoff_knows_about():
+    """handoff.REVIEW_REASONS must stay in step with routing.py: feed route() inputs for each review rule."""
+    from datetime import datetime, timezone as tz
+    from routing import route
+    from shared.schemas import Segment, Transcript
+    cases = {
+        "customer call without a caller name": dict(text="please ring me", name=None, number="07700900123", category="other", urgency=1),
+        "customer call without a callback number": dict(text="please ring me", name="Dave", number=None, category="other", urgency=1),
+        "safety words": dict(text="there is a smell of gas", name="Dave", number="07700900123", category="other", urgency=1),
+        "unclear audio": dict(text="hello there", name="Dave", number="07700900123", category="other", urgency=1, logprob=-2.0),
+        "analysis needed a retry": dict(text="hello there", name="Dave", number="07700900123", category="other", urgency=1, attempts=2),
+        "no speech found": dict(text="", name="Dave", number="07700900123", category="other", urgency=1, segments=False),
+    }
+    now = datetime.now(tz.utc)
+    for expected, c in cases.items():
+        segments = [Segment(start=0, end=1, text=c["text"], avg_logprob=c.get("logprob", 0.0), no_speech_prob=0.0)] if c.get("segments", True) else []
+        t = Transcript(source_file="call-x.json", audio_sha256="0" * 64, model="call", language="en", language_probability=1.0,
+                       duration_s=0, transcribe_s=0, text=c["text"], segments=segments, created_at=now)
+        analysis = Analysis(summary="s", reason="r", category=c["category"], urgency=c["urgency"], caller_name=c["name"],
+                            callback_number=c["number"], language="en")
+        result = Result(source_file="x", audio_sha256="0" * 64, transcript_model="call", llm_model="m", prompt_version="p",
+                        attempts=c.get("attempts", 1), rejected_reply=None, rejected_because="x" if c.get("attempts", 1) > 1 else None,
+                        analyze_s=0, analysis=analysis, created_at=now)
+        decision = route(t, result)
+        flagged = [r for r in decision.reasons[1:] if r.startswith(handoff.REVIEW_REASONS)]
+        assert decision.review and flagged and any(r.startswith(expected) for r in flagged), (expected, decision.reasons)
