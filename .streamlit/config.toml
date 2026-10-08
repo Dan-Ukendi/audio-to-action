@@ -1,0 +1,9 @@
+# Local-only app: listen on this computer only, no usage statistics sent anywhere.
+[server]
+address = "localhost"
+port = 8501
+headless = false
+
+[browser]
+gatherUsageStats = false
+serverAddress = "localhost"

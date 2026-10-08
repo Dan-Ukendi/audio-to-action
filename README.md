@@ -51,6 +51,19 @@ tool-calling **agent** (default) or with plain-code **rules** (`--sync rules`). 
 Measured: the agent beat the rules by one task on real extracted items (7/14 vs 6/14) at ~50 minutes of CPU per
 five meetings; on perfect input the rules won (14/14 vs 11/14). Details: [02-meeting-action-agent/README.md](02-meeting-action-agent/README.md).
 
+## Local app (add audio, run, see results)
+Double-click **`start_app.bat`** (or run `python -m streamlit run apppp.py`): a page opens at
+http://localhost:8501, reachable only from this computer.
+- **Voicemails** tab: drop audio files → *Process the inbox* → a table of results (route, category, caller,
+  number, summary, review flags); click a row for the transcript, the reasons for the route and the audio.
+- **Meetings** tab: drop recordings (pick the meeting date if the file name has none) → choose *agent* or
+  *rules* → *Process the inbox* → the task tracker, the items found in each meeting, every tracker change
+  with its reason, and the agent's steps.
+- Runs happen in the background with a live log; failed files show the step and error, with *Retry failed*.
+- The sidebar warns if ffmpeg or Ollama is missing, or if there's too little free memory (~6 GB needed).
+The app uses the same inbox folders, databases and `run.py` scripts as the command line. Its code is in `app/`
+(`helpers.py` = the logic, `app.py` = the page). Tests: `python -m pytest app	ests`.
+
 ## Setup (Windows / PowerShell)
 Needs Python 3.13, [ffmpeg](https://ffmpeg.org) on PATH and [Ollama](https://ollama.com).
 ```powershell

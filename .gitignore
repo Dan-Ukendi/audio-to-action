@@ -78,3 +78,6 @@ models/
 .idea/
 Thumbs.db
 .DS_Store
+
+# Local app: run logs (contain file names)
+app/runs/
