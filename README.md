@@ -7,7 +7,7 @@ no cloud APIs, no audio leaving the machine.
 |---|---|---|---|---|
 | 1 | `01-voicemail-triage/` | Voicemails → transcript → category, urgency, caller, number, summary → routed | Workflow | done |
 | 2 | `02-meeting-action-agent/` | Meeting recordings → action items → task tracker sync | Workflow + agent | done |
-| 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | Agent | not started |
+| 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | State machine, then agent | in progress (Phase 0 built) |
 
 `shared/` holds code reused across parts: transcription (+ name hint), schemas, the "fill a form with the LLM,
 validate, retry once" helper (`llm.py`), text-to-speech (`tts.py`), eval helpers, retries, notifications and
@@ -150,5 +150,6 @@ the database stay on this machine and are git-ignored; keep the repo outside syn
 
 Part 2 (meetings): [x] 0 plan · [x] 1 test set · [x] 2 transcription + hint · [x] 3 extraction · [x] 4 agent ·
 [x] 5 glue & rollback · [x] 6 evaluation (agent vs rules) · [x] 7 polish.
-Part 3 (phone receptionist): not started; early choices: local simulation (mic/speaker or a scripted caller),
-take a message into the Part 1 pipeline.
+Part 3 (phone receptionist): [~] 0 plan + persona + FAQ (built; owner confirmation of wording/FAQ and the laptop GPU check pending) · [ ] 1 caller cards · [ ] 2 audio loop · [ ] 3 dialog A ·
+[ ] 4 hand-off · [ ] 5 dialog B · [ ] 6 evaluation · [ ] 7 polish. Plan: `docs/PART3_PLAN.md`; build notes and decisions:
+`03-phone-receptionist/README.md`.

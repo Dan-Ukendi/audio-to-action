@@ -121,11 +121,42 @@ and every tracker change recorded with its reason (reversible).
 7. Polish (done: Part 2 README rewritten, main README + docs/HANDOVER.md §12 updated, Part 1 run.py move fix,
    learning log corrected; Part 2 complete)
 
-## Part 3: phone-receptionist (not started)
-User's early choices (2026-10-07, confirm before starting): calls arrive by **local simulation** (laptop mic/speakers
-or a scripted synthetic caller; no Twilio or other paid/cloud telephony), and the receptionist's job is **take a
-message** (name, number, reason) and hand it to the Part 1 pipeline (routing, urgent push). Start with a Phase 0 plan.
-When the user authorises several phases at once: after each phase, a separate reviewer agent verifies and optimises.
+## Part 3: phone-receptionist (`03-phone-receptionist/`)
+Full plan: `docs/PART3_PLAN.md` (the owner's brief). What was built from it and every decision taken: `03-phone-receptionist/README.md`.
+
+Choices (owner, 2026-10-07/08):
+- Calls reach the receptionist by **local simulation**: live use = push-to-talk in the browser (Streamlit `st.audio_input`),
+  tests = a scripted synthetic caller (audio files or plain text, no browser). No telephony provider.
+- Job: **take a message** (reason, name, callback number, urgency) and **answer simple questions** from `faq.json` only.
+  Then hand the message to the Part 1 pipeline (analyze, route, push if urgent, `voicemails.db`).
+- Order: **state machine first** (version A, plain code); a tool-calling agent (version B) afterwards as a measured experiment.
+- Persona: "Holly", the automated assistant of Brightwater Plumbing & Heating; she says she is automated and that the call is recorded.
+- Extra rules for Part 3: the dialog engine is UI-independent pure Python; every sentence she says comes from `persona.json`
+  or `faq.json` (a model never writes what is said); call audio, records and logs are git-ignored.
+
+Git rule (absolute, every commit, branch and PR): the only author and committer is **Dan-Ukendi <dan.ukendi1@gmail.com>**.
+No co-author lines, no "generated with" lines, no mention of any AI tool or vendor in commits, PR texts or committed files.
+Check `git log origin/main..HEAD --format='%an <%ae> | %cn <%ce>%n%B'` before every push. One commit per phase.
+
+Phases (Part 3):
+0. Plan & setup (persona, FAQ, folders, rules)
+1. Test set: synthetic callers (caller cards + labels, `simulate.py`), written BEFORE any dialog code
+2. Audio loop + speed budget (listen/speak, file loop, push-to-talk page, speed measurements)
+3. Dialog version A (state machine: `turn.py`, `dialog.py`, `faq.py`, `call.py`)
+4. Hand-off to Part 1 (`handoff.py`)
+5. Dialog version B (tool-calling agent, `agent_dialog.py`)
+6. Evaluation (`evaluate.py`, A vs B with a rule written before the runs)
+7. Polish (app page, README, learning log, HANDOVER section 13)
+
+When the owner authorises several phases in one go, rule 1 ("stop after each phase") is replaced by: after each phase a
+SEPARATE reviewer agent checks the phase against the plan and runs the tests (max 3 review rounds per phase), then the
+next phase starts. Decisions the plan leaves to the owner are taken with the plan's default (or the most conservative option)
+and listed in the "Decisions taken without the owner" table in `03-phone-receptionist/README.md`.
+
+Definition of done (Part 3, draft, from the plan): callback number exactly right >= 80 %, name >= 80 %, 0 invented numbers;
+every urgent caller flagged during the call (0 missed) with a push sent or dry-run logged; FAQ answered correctly >= 80 % with
+0 answers that are not in `faq.json`; every completed call lands in `voicemails.db`; median reply <= 5 s on the laptop (to be
+measured there); the owner can explain why the dialog is a state machine and what the agent version costs.
 
 ## Definition of done (Part 2)
 - Action items: precision ≥ 80 % and recall ≥ 80 % on the test set (item = task + owner match).

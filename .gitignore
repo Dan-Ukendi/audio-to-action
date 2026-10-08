@@ -37,6 +37,15 @@
 02-meeting-action-agent/testset/traces_*/
 !02-meeting-action-agent/**/.gitkeep
 
+03-phone-receptionist/calls/*
+03-phone-receptionist/logs/*
+03-phone-receptionist/traces/*
+03-phone-receptionist/results/*
+03-phone-receptionist/testset/audio/
+03-phone-receptionist/testset/voice_samples/
+03-phone-receptionist/testset/runs/
+!03-phone-receptionist/**/.gitkeep
+
 # Test set: scripts.json + labels.json + generate.py ARE committed;
 # generated audio and the downloaded TTS voice are not (regenerate with generate.py).
 01-voicemail-triage/testset/audio/

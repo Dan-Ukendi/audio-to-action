@@ -1534,3 +1534,63 @@ What Part 2 taught, in one line each:
 - **Always build the simple baseline**: about 20 lines of rules scored 14/14 on perfect input where the agent scored 11/14.
 - **Decide on the real pipeline**, and read the cost (51 calls, ~94 min) next to the gain (+1 task).
 - **Independent review pays**: every Part 2 phase had a real bug or overclaim that the builder missed.
+
+## Part 3, Phase 0: Plan, persona and FAQ (2026-10-08)
+
+### 1. What we built
+The groundwork for Part 3, the phone receptionist. We wrote down the plan and every decision, gave the receptionist a
+name and a fixed set of sentences ("Holly", the automated assistant of Brightwater Plumbing & Heating), and wrote the
+only facts she may state (a 23-entry FAQ). Nothing talks yet: this phase is data, rules and folders.
+
+### 2. Where it fits in the pipeline
+```
+ Part 1: voicemail ─► transcribe ─► analyze ─► route ─► deliver/store
+ Part 2: meeting   ─► transcribe+hint ─► extract ─► sync (agent | rules) ─► tracker
+ Part 3: caller ─► listen ─► understand ─► decide ─► speak ─► ... ─► hand off to Part 1
+ [Phase 0: persona.json + faq.json + plan + folders]  <-- you are here (nothing is wired together yet)
+```
+
+### 3. How it works, step by step
+- `docs/PART3_PLAN.md`: the owner's brief, committed. `03-phone-receptionist/README.md`: what is built, the decisions taken
+  without the owner, and the A-vs-B decision rule written before any model run.
+- `persona.json`: Holly's 22 fixed sentences, the detail order (reason, name, number), the limits (12 turns, 2 re-asks, 2 silent
+  turns), the Whisper hint (team and places, no customer names) and the voice ids that are taken. `persona.py` loads it and checks
+  it: every line present, only known placeholders, no digits (the text is read aloud). `speak_number()` reads digits in groups.
+- `faq.json`: the facts Holly may give, spoken form. `faq.py` loads and checks it. Three entries are real UK safety advice.
+- Folders `calls/`, `logs/`, `testset/` with `.gitkeep`; `.gitignore` keeps call records, logs and test audio out of git.
+
+### 4. Key concepts I should understand
+- **Fixed sentences instead of generated ones:** a model that writes the reply can invent a price. A model that only *picks* which
+  fixed sentence to say cannot. Example: "ninety-five pounds" exists in one place, `faq.json`.
+- **A hint must not contain what you score:** the Whisper hint lists the team and places but no caller names; otherwise the name
+  accuracy would measure the hint, not the transcription.
+- **Write the decision rule before the experiment:** the A-vs-B rule (section 4 of the README) is fixed now, so the result cannot
+  nudge the rule.
+- **Autonomy needs a paper trail:** every choice the owner would normally make is in the "Decisions taken without the owner" table.
+
+### 5. Files created or changed
+- `docs/PART3_PLAN.md`, `03-phone-receptionist/README.md`: plan, decisions, rules.
+- `03-phone-receptionist/persona.json`, `persona.py`, `faq.json`, `faq.py`, `tests/test_persona_data.py`: data, loaders, checks.
+- `03-phone-receptionist/{calls,logs,testset}/.gitkeep`; `.gitignore`, `requirements.txt` (streamlit).
+- `PROJECT_RULES.md` (Part 3 section), `README.md`, `docs/HANDOVER.md`: status lines.
+
+### 6. Try it yourself
+```powershell
+python -m pytest 03-phone-receptionist\tests -q
+python -c "import sys; sys.path.insert(0,'03-phone-receptionist'); from persona import *; p=load_persona(); print(p.say('greeting')); print(speak_number('01632960501'))"
+```
+Expected: the tests pass; Holly's greeting; `oh one six three two, nine six oh, five oh one`.
+
+### 7. What can go wrong
+- A persona line with a digit or a wrong placeholder: the loader refuses it at start-up, on purpose.
+- The FAQ is fictional apart from the safety numbers: do not give the prices to anyone.
+- The GPU check (`nvidia-smi`, `ollama ps`) could not be run in the cloud: do it first on the laptop.
+
+### 8. Check my understanding
+1. Why does Holly never let the model write her reply?
+2. Why is the receptionist's voice id `null` in `persona.json`?
+3. Why are customer names kept out of the Whisper hint?
+
+### 9. Next phase preview
+Phase 1 writes the synthetic callers: one "caller card" for each of the 18 Part 1 voicemails plus a few FAQ callers, with the
+answer key, before any dialog code exists. A scripted simulator answers whatever Holly asks, from the card.

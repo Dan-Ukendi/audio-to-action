@@ -1,0 +1,46 @@
+{
+  "_about": "Who answers the phone and every fixed sentence she can say. The dialog engine never writes free text: each reply is built from these lines plus the approved answers in faq.json. Spoken forms only (no digits): the text goes straight to the text-to-speech voice. Placeholders: {name} {first_name} {number} {reason}.",
+  "business": "Brightwater Plumbing & Heating",
+  "receptionist": "Holly",
+  "piper_speaker": null,
+  "piper_speaker_note": "null until the owner picks a voice on the laptop in Phase 2 (python 03-phone-receptionist/choose_voice.py, written in Phase 2). Must not be in voice_ids_taken. The RECEPTIONIST_SPEAKER environment variable overrides this value for a single run.",
+  "voice_ids_taken": {
+    "part2_meeting_voices": [7, 0, 9, 11],
+    "part1_callers": [3, 5, 11, 15, 25, 27, 33, 40, 45, 50, 55, 60, 64, 72, 80, 90]
+  },
+  "whisper_hint": {
+    "_about": "Proper nouns Whisper should spell right. Deliberately NO customer or caller names: the caller's name is what we score, so hinting it would inflate the result.",
+    "team": ["Sam", "Priya", "Tom", "Jamie"],
+    "places": ["Kelmbridge", "Mill Lane", "Station Road", "Wexley Green", "Harrowfield", "Thornsby Cross", "Overmere"]
+  },
+  "detail_order": ["reason", "name", "number"],
+  "limits": {
+    "max_turns": 12,
+    "max_reasks_per_detail": 2,
+    "max_silent_turns": 2
+  },
+  "lines": {
+    "greeting": "Hello, you've reached Brightwater Plumbing and Heating. This is Holly, the automated assistant. This call is recorded. How can I help you today?",
+    "ask_reason": "Could you tell me briefly what your call is about?",
+    "ask_name": "Could I take your name, please?",
+    "ask_name_spelling": "Thank you, {first_name}. Could you spell your last name for me, letter by letter?",
+    "ask_number": "And what is the best number to call you back on?",
+    "number_refused": "I'm sorry, I don't have your number from this call. Could you give me a number to reach you on?",
+    "repeat_request": "Sorry, I didn't catch that. Could you say that again?",
+    "confirmed": "Thank you, I've got that down.",
+    "read_back": "So that's {name}, on {number}, about {reason}. Is that right?",
+    "read_back_no_number": "So that's {name}, about {reason}, and I don't have a number for you. Is that right?",
+    "read_back_no_name": "So that's a message about {reason}, from a caller who didn't give a name, on {number}. Is that right?",
+    "read_back_no_name_no_number": "So that's a message about {reason}, with no name or number. Is that right?",
+    "reason_missing_phrase": "something I wasn't able to take down",
+    "correction": "Sorry about that. What should I change: your name, your number, or what it's about?",
+    "faq_unknown": "I'm afraid I don't have that information, but I'll pass your question on to the team.",
+    "anything_else": "Is there anything else I can help you with?",
+    "urgent_ack": "I understand this is urgent, so I'm flagging it for the team right now.",
+    "goodbye": "Thank you for calling Brightwater Plumbing and Heating. I've passed your message to the team. Goodbye.",
+    "goodbye_urgent": "Thank you. I've marked your message as urgent, and the team will call you back as soon as possible. If anyone is in danger, please call nine nine nine. Goodbye.",
+    "goodbye_spam": "Goodbye.",
+    "silence_end": "I can't hear you, so I'll end the call now. Please call back when you're ready. Goodbye.",
+    "turn_limit": "I'm sorry, we've run out of time on this call, so I'll pass on what I have. Goodbye."
+  }
+}

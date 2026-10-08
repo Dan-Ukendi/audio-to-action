@@ -16,9 +16,11 @@ understanding over speed. Everything runs **locally and for free**.
   audio → transcribe → analyze (LLM fills a schema) → route (plain-code rules) → notify/store.
 - **Part 2, `02-meeting-action-agent/` (DONE, see §12):** meeting recordings → action items (workflow) → a task
   tracker synced across meetings by a bounded agent (or plain-code rules).
-- **Part 3, `03-phone-receptionist/` (not started):** real-time AI phone receptionist (full agent). User's early
-  choices: local simulation (laptop mic/speakers or a scripted synthetic caller, no telephony provider), job =
-  take a message (name, number, reason) into the Part 1 pipeline. Confirm before starting.
+- **Part 3, `03-phone-receptionist/` (in progress; Phase 0 built, owner confirmation pending):** real-time AI phone receptionist ("Holly"). Local
+  simulation (browser push-to-talk or a scripted synthetic caller, no telephony provider); job = take a message
+  (reason, name, number, urgency) and answer simple questions from `faq.json`, then hand the message to the Part 1
+  pipeline. State machine first, tool-calling agent second, measured. Plan: `docs/PART3_PLAN.md`; decisions and status:
+  `03-phone-receptionist/README.md`.
 
 Rules from `PROJECT_RULES.md` that any agent working here must follow:
 1. One phase at a time; stop after each and wait for the user to say "next" (unless told otherwise). When the
@@ -482,8 +484,7 @@ set. Saved agent runs predate the last agent fix (not_work for cancelled ideas).
 2. Improve extraction first (it caps the sync at 9/14): turbo transcripts; more and real (consented) meetings.
 3. Try a hybrid sync: rules first, the agent only for items no rule matches confidently.
 4. Re-run the agent series twice with the current `agent.py` to measure its noise; add the 9/14 oracle to evaluate.py.
-5. Part 3 (receptionist): start with a Phase 0 plan from the choices in §1; reuse `shared/tts.py`, `transcribe.py`,
-   `llm.py`, `pipeline.py` and Part 1's routing.
+5. Part 3 (receptionist): in progress; plan in `docs/PART3_PLAN.md`, build notes in `03-phone-receptionist/README.md`.
 
 ### 12.10 How to run (Part 2)
 ```powershell
