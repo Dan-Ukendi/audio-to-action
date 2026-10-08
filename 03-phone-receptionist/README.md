@@ -168,9 +168,10 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 
 ## 8. What has to be run on the laptop
 Nothing below could be run in the cloud session (no GPU, Ollama model, Whisper model, Piper voice or microphone).
-The commands are filled in as each phase is built; the complete ordered list will be in the final report and in `docs/HANDOVER.md` section 13 (both written at the end of Phase 7).
+Run them in this order (the same list is summarised in `docs/HANDOVER.md` section 13.4).
 
 ```powershell
+# 1. Get the branch and check the machine
 cd C:\Users\danuk\code\audio-to-action
 .\.venv\Scripts\Activate.ps1
 git fetch origin part3-receptionist; git checkout part3-receptionist
@@ -179,29 +180,30 @@ nvidia-smi                                          # the RTX 5050 must be liste
 ollama ps                                           # while a model runs: PROCESSOR should say 100% GPU
 python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests 03-phone-receptionist\tests -q
 
-# Phase 5: the agent (needs Ollama; a failing agent falls back to the state machine and says so)
-python 03-phone-receptionist\call.py --card dev --understand model --decide b
-
-# Phase 4: hand a saved call to Part 1 (needs Ollama for --analysis model)
-python 03-phone-receptionist\handoff.py 03-phone-receptionist\calls\*.json --analysis rules   # no model; writes 01-voicemail-triage\voicemails.db
-python 01-voicemail-triage\store.py                                                       # Part 1's summary of the table (calls are the rows named call-*.json)
-
-# Phase 3: simulated calls (the rules run anywhere; 'model' needs Ollama with qwen2.5:7b)
-python 03-phone-receptionist\call.py --card dev --understand rules      # no model: a quick look at the dialog
-python 03-phone-receptionist\call.py --card dev --understand model      # the LLM fills the per-turn form (use dev cards only while tuning)
-python 03-phone-receptionist\call.py --card c14 --understand model --audio --save   # full audio loop, saves calls\*.json
-
-# Phase 2: voice and speed (the numbers in docs\part3-speed.md exist only after this)
+# 2. Phase 2: voice and speed (the numbers in docs\part3-speed.md exist only after this)
 python 03-phone-receptionist\choose_voice.py       # listen to testset\voice_samples\*.wav, set piper_speaker in persona.json
 python 03-phone-receptionist\measure_speed.py --device cpu  --whisper base small --llm qwen2.5:7b
 python 03-phone-receptionist\measure_speed.py --device cuda --whisper base small --llm qwen2.5:7b qwen2.5:3b   # after the GPU fix; ask before pulling qwen2.5:3b (~1.9 GB)
-python -m streamlit run 03-phone-receptionist\app.py   # push-to-talk page (the real dialog; pick rules or model in the sidebar)
 
-# Phase 6: the evaluation (needs Ollama; the audio run also Whisper + Piper). Rewrites docs\part3-eval-results.md
-python 03-phone-receptionist\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs
+# 3. Phase 3: simulated calls (the rules run anywhere; 'model' needs Ollama with qwen2.5:7b). Dev cards only while tuning.
+python 03-phone-receptionist\call.py --card dev --understand rules      # no model: a quick look at the dialog
+python 03-phone-receptionist\call.py --card dev --understand model      # the LLM fills the per-turn form
+python 03-phone-receptionist\call.py --card c14 --understand model --audio --save   # full audio loop, saves calls\*.json
+
+# 4. Phase 5: the agent (needs Ollama; a failing agent falls back to the state machine and says so)
+python 03-phone-receptionist\call.py --card dev --understand model --decide b
+
+# 5. Phase 4: hand saved calls to Part 1 (needs Ollama for --analysis model)
+python 03-phone-receptionist\handoff.py 03-phone-receptionist\calls\*.json --analysis rules   # no model; writes 01-voicemail-triage\voicemails.db
+python 01-voicemail-triage\store.py                                                       # Part 1's summary (calls are the rows named call-*.json)
+
+# 6. Phase 6: the evaluation on the score cards (needs Ollama; the audio run also Whisper + Piper)
+python 03-phone-receptionist\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs   # rewrites docs\part3-eval-results.md
 python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs     # the real speed (median reply <= 5 s); writes part3-eval-results-audio.md
+
+# 7. The push-to-talk page (the real dialog; pick rules or model in the sidebar)
+python -m streamlit run 03-phone-receptionist\app.py
 ```
-Later phases add their own commands here.
 
 ## 9. Lessons from Parts 1-2 applied from day one
 - The answer key (caller cards and labels) is written **before** the dialog code, and prompts are tuned on `dev` cards only.

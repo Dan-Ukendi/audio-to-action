@@ -201,3 +201,34 @@ def test_a_model_run_where_the_model_failed_is_invalid_and_never_written(tmp_pat
 
 def test_the_audio_run_has_its_own_results_file():
     assert evaluate.AUDIO_RESULTS_FILE != evaluate.RESULTS_FILE
+
+
+def test_a_clean_model_run_on_the_score_cards_writes_the_results_file_even_with_spam_calls(tmp_path, monkeypatch, capsys):
+    """Spam and no-message calls get plain-code analysis on purpose ('none (rules)'): that is not a model failure."""
+    import agent_dialog
+    monkeypatch.setattr(evaluate, "RESULTS_FILE", tmp_path / "results.md")
+    monkeypatch.setattr(evaluate, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(evaluate, "build_understand", lambda kind: ((lambda t, c: Understanding(rules_understand(t, c))), "model", "t1"))
+    monkeypatch.setattr(evaluate.handoff, "default_analyze", lambda transcript: NS(
+        analysis=None, llm_model="fake", prompt_version="call-v1", attempts=1, rejected_because=None, analyze_s=0.0))
+    monkeypatch.setattr(evaluate.handoff, "merge_model_analysis", lambda record, analysis: evaluate.handoff.rule_analysis(record))
+
+    def fake_b():
+        def decide(state, facts, persona):
+            return dialog.decide_a(state, facts, persona)
+        decide.last_trace = None
+        return decide
+    monkeypatch.setattr(agent_dialog, "make_decide_b", fake_b)
+    assert evaluate.main(["--split", "score", "--understand", "model", "--decide", "both", "--repeat-a", "2", "--write-docs"]) == 0
+    out = capsys.readouterr().out
+    assert "INVALID" not in out and (tmp_path / "results.md").exists()
+
+
+def test_an_audio_request_without_a_voice_is_never_written_to_the_audio_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(evaluate, "AUDIO_RESULTS_FILE", tmp_path / "audio.md")
+    monkeypatch.setattr(evaluate, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(evaluate, "has_voice", lambda persona: False)
+    monkeypatch.setattr(evaluate, "build_understand", lambda kind: ((lambda t, c: Understanding(rules_understand(t, c))), "model", "t1"))
+    monkeypatch.setattr(evaluate.call_module, "audio_channel_for", lambda card, persona: None)
+    evaluate.main(["--split", "f03", "--understand", "model", "--decide", "a", "--repeat-a", "1", "--audio", "--write-docs", "--no-handoff"])
+    assert not (tmp_path / "audio.md").exists() and "NOT written" in capsys.readouterr().out

@@ -105,7 +105,7 @@ def score_call(card: Card, record, pattern: re.Pattern, hand: handoff.HandOff | 
     unknown_ok = bool(m["unanswered_questions"]) == card.expect.faq_unknown
     traces = [t["decide_trace"] for t in record.turns if t.get("decide_trace")]
     understand_fallbacks = sum(1 for t in record.turns if (t.get("understanding") or {}).get("fallback"))
-    analysis_fallback = bool(record.handoff) and str(record.handoff.get("llm_model", "")).startswith("none")
+    analysis_fallback = bool(record.handoff) and record.handoff.get("llm_model") == "none (model failed)"
     bad_replies = [t["reply"] for t in record.turns if t.get("reply") and not pattern.fullmatch(t["reply"])]
     score = {
         "card": card.id, "split": card.split, "outcome": record.outcome, "outcome_ok": record.outcome == card.expect.outcome,
@@ -391,12 +391,16 @@ def main(argv: list[str] | None = None) -> int:
     path.write_text(json.dumps({"meta": meta, "runs": runs, "verdict": verdict}, indent=2, ensure_ascii=False), encoding="utf-8")
     print("details saved to", path)
     if args.write_docs:
-        target = AUDIO_RESULTS_FILE if args.audio else RESULTS_FILE
-        if args.understand != "model":
+        target = AUDIO_RESULTS_FILE if audio else RESULTS_FILE
+        if args.audio and not audio:
+            print("NOT written to the docs: --audio was asked for but no receptionist voice is chosen (this was a text run).")
+        elif args.no_handoff:
+            print("NOT written to the docs: the hand-off was skipped, so the push and table rows would be unmeasured.")
+        elif args.understand != "model":
             print("NOT written to the docs: a run without a model only tests the harness.")
         elif meta.get("invalid"):
             print("NOT written to the docs: the run is invalid (see the banner).")
-        elif args.split != "score" or not (args.audio or args.decide == "both"):
+        elif args.split != "score" or not (audio or args.decide == "both"):
             print("NOT written to the docs: the results file is for `--split score --decide both` (or an `--audio` run on the score cards).")
         else:
             target.write_text(report, encoding="utf-8")

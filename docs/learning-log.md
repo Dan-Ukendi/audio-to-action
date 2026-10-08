@@ -1960,7 +1960,7 @@ done, run order) were brought in line with the code.
 
 ### 4. Key concepts I should understand
 - **Thin shell:** the page only wires; every rule is in tested modules.
-- **Documents against code:** HANDOVER 13.2 maps each promise to the code and the test that keeps it true.
+- **Documents against code:** HANDOVER 13.2 maps each promise to the code that does it.
 - **Honest status:** "built and tested" is not "measured"; the docs say which numbers do not exist yet.
 
 ### 5. Files created or changed
