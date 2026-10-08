@@ -1799,7 +1799,7 @@ decides what happens, an urgent call is pushed (a dry run until NTFY is configur
 - `call_transcript()` builds a Part 1 `Transcript` from the caller's answers (one segment per answer; Whisper's confidence is passed on, so unclear audio is flagged by Part 1's own rule).
 - `analysis_for_call()`: robocalls, info-only and silent calls get an analysis from plain code. Others go to `analyze(..., prompt_version="call-v1")`; then `merge_model_analysis()` puts the dialog's checked name and number over the model's and keeps an urgent call urgent. If the model fails, plain code builds it and the row is flagged for review.
 - `route()` (Part 1, unchanged) decides notify / inbox / archive and the review flags; `hand_off()` adds a reason line ("phone call, outcome ..., flagged urgent in turn 1").
-- `LivePush` sends the minimal "Urgent call in progress" push the moment `run_call` flags the call, in a background thread so the caller never waits; `hand_off()` waits for it and does not push twice. Push first, save second (Part 1's at-least-once order).
+- `LivePush` sends the minimal "Urgent call in progress" push the moment `run_call` flags the call, in a background thread so the caller never waits; `hand_off()` waits for it (15 s at most; after that the end push goes out too, so the phone may ring twice, never zero times) and otherwise does not push twice. Push first, save second (Part 1's at-least-once order).
 - `save()` (Part 1) upserts by a hash of the call: handing the same call off again refreshes the row but never adds a row or a second push.
 
 ### 4. Key concepts I should understand
@@ -1832,3 +1832,55 @@ Expected: one row per call; the gas call routed `notify_now` (the dry-run push t
 
 ### 9. Next phase preview
 Phase 5 builds version B: the same receptionist, but the choice of the next action is made by a boxed tool-calling agent (with Part 2's guardrails) instead of the state machine, so the two can be compared on the same callers.
+
+## Part 3, Phase 5: Dialog version B, the tool-calling agent (2026-10-08)
+
+### 1. What we built
+The same receptionist with a different brain for one step: instead of the state machine, a boxed tool-calling agent (Part 2's guardrails)
+chooses the next action. It is built so the two versions can be compared fairly on the same callers in Phase 6. **It has never run with a
+real model**: tests use scripted tool calls, a "perfect" fake agent that reproduces version A on all 24 callers, and a random agent.
+
+### 2. Where it fits in the pipeline
+```
+ caller text ─► UNDERSTAND ─► APPLY (grounding, emergency, FAQ: shared) ─► DECIDE ─┬─ version A: dialog.decide_a (state machine)
+                                                                                  └─ version B: agent_dialog.make_decide_b (tool loop)
+                                                                          ─► RENDER (fixed sentences: shared)
+ [Phase 5: agent_dialog.py]  <-- you are here
+```
+
+### 3. How it works, step by step
+- `build_turn()` asks the state machine first; its decision is always one LEGAL option. A few more are legal where judgement can matter.
+- The loop (max 4 LLM calls per turn): a fresh state message each step (what the caller said, what we have, questions to answer, the legal
+  actions, feedback on the last calls) -> tool calls -> `run_tool()` validates each one and answers `ERROR: ...` with advice when it is illegal.
+- `answer_faq(topic)` must be called for every question the caller asked before an action; `flag_urgent(why)` once; then exactly one of
+  `ask(detail)`, `read_back()`, `take_message()`, `end_call(why)`.
+- If no legal action comes out (model error, prose, step limit, same input twice), the state machine's decision is used: `fallback: true` in the trace.
+
+### 4. Key concepts I should understand
+- **Freedom is a budget:** the agent may only choose among actions the state allows, so its mistakes are bounded; the price is that it often has exactly one option.
+- **Values never go through the model:** no tool takes a name, number or sentence, so nothing can be invented there.
+- **The baseline stays underneath:** the fallback means a bad model day costs speed and a logged fallback, not a broken call.
+- **A fair experiment shares everything but one step:** the equivalence test (an agent that takes the state machine's choice gives byte-identical calls) proves the harness adds no behaviour of its own.
+
+### 5. Files created or changed
+- New: `agent_dialog.py`, `tests/test_agent_dialog.py`. Changed: `dialog.py` (`Facts.caller_text`), `call.py` (`--decide a|b`, `CallRecord.decide`), `handoff.py` docstrings.
+
+### 6. Try it yourself
+```powershell
+python -m pytest 03-phone-receptionist\tests\test_agent_dialog.py -q
+python 03-phone-receptionist\call.py --card dev --understand model --decide b      # needs Ollama
+```
+Expected: the tests pass; on the laptop a transcript where "(agent fell back to the state machine: ...)" appears under a turn whenever the model failed.
+
+### 7. What can go wrong
+- `qwen2.5:7b` may call tools badly (the Part 2 agent guessed ids): expect fallbacks; Phase 6 counts them.
+- Latency: the agent adds up to 4 LLM calls to a turn on top of understanding; the 5 s target will be hard on CPU.
+- A model that always agrees with the state machine makes B equal to A at higher cost; that is a result, not a bug.
+
+### 8. Check my understanding
+1. Why does the agent always have the state machine's decision among its legal options?
+2. Why is it safe that `flag_urgent` exists although urgency is also detected by code?
+3. What does the equivalence test prove, and what does it not prove?
+
+### 9. Next phase preview
+Phase 6 runs every caller card through both versions, scores them (slot accuracy, invented numbers, urgent flagged, FAQ answers, turns, latency) and applies the A-vs-B rule that was written before any run. The numbers need the laptop's models.

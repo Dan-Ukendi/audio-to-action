@@ -79,6 +79,7 @@ class CallRecord(BaseModel):
     started: str
     channel: str
     understand: str                        # which understanding step produced the forms ("model" / "rules")
+    decide: str = "a"                      # which decision step chose the actions: "a" (state machine) / "b" (agent)
     prompt_version: str | None = None
     greeting: str
     turns: list[dict] = Field(default_factory=list)
@@ -92,7 +93,8 @@ class CallRecord(BaseModel):
 
 
 def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_fn, channel=None, decide_fn=dialog.decide_a,
-             on_urgent=None, understand_label: str = "model", prompt_version: str | None = None) -> CallRecord:
+             on_urgent=None, understand_label: str = "model", prompt_version: str | None = None,
+             decide_label: str = "a") -> CallRecord:
     """Run one simulated call to its end. `on_urgent(state)` is called once, the turn the call is first flagged urgent
     (Phase 4 plugs the immediate push in there)."""
     channel = channel or TextChannel()
@@ -121,7 +123,7 @@ def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_
     return CallRecord(
         call_id=f"{card.id}-{started_at:%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:6]}", card_id=card.id,
         started=started_at.isoformat(timespec="seconds"), channel=channel.name, understand=understand_label,
-        prompt_version=prompt_version, greeting=greeting, turns=state.log, message=dialog.message_of(state),
+        decide=decide_label, prompt_version=prompt_version, greeting=greeting, turns=state.log, message=dialog.message_of(state),
         outcome=state.outcome if not cut_off else "cut_off", urgent_flagged_at_turn=urgent_turn, cut_off=cut_off,
         total_s=round(time.perf_counter() - started, 3), final_state=state.model_dump(exclude={"log"}))
 
@@ -142,6 +144,8 @@ def print_transcript(record: CallRecord, persona: Persona) -> None:
     for t in record.turns:
         print(f"CALLER: {t['caller_text'] or '(silence)'}")
         print(f"HOLLY : {t['reply'] or '(call ended)'}")
+        if t.get("decide_trace") and t["decide_trace"]["fallback"]:
+            print(f"        (agent fell back to the state machine: {t['decide_trace']['fallback_why']})")
     m = record.message
     print(f"--- outcome={record.outcome} urgent={m['urgent']} name={m['name']!r} number={m['number']!r} reason={m['reason']!r} "
           f"faq={m['faq_answered']} passed-on={m['unanswered_questions']} turns={len(record.turns)}")
@@ -152,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--card", default="dev", help="a card id prefix (c14), 'dev', 'score' or 'all' (default: dev)")
     parser.add_argument("--understand", choices=["model", "rules"], default="model",
                         help="model = the LLM fills the per-turn form (needs Ollama); rules = plain-code baseline, no model")
+    parser.add_argument("--decide", choices=["a", "b"], default="a",
+                        help="a = the state machine; b = the tool-calling agent (needs Ollama; falls back to a when it fails)")
     parser.add_argument("--audio", action="store_true", help="speak and listen for real (Piper + Whisper): laptop only")
     parser.add_argument("--save", action="store_true", help="save each call as JSON in 03-phone-receptionist/calls/ (git-ignored)")
     args = parser.parse_args(argv)
@@ -173,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         understand_fn, label, version = understand, "model", PROMPT_VERSION
 
+    decide_fn = dialog.decide_a
+    if args.decide == "b":
+        from agent_dialog import make_decide_b
+        decide_fn = make_decide_b()
     for card in chosen:
         channel = None
         if args.audio:
@@ -187,7 +197,8 @@ def main(argv: list[str] | None = None) -> int:
                 speaker = None
             channel = AudioChannel(Path(tempfile.mkdtemp(prefix=f"{card.id}_")), persona.hint, speaker, render_turn, listen,
                                    lambda text, out, spk: speak(text, out, spk, synth_fn=piper_synth))
-        record = run_call(card, persona, faq, understand_fn, channel=channel, understand_label=label, prompt_version=version)
+        record = run_call(card, persona, faq, understand_fn, channel=channel, decide_fn=decide_fn, understand_label=label,
+                          prompt_version=version, decide_label=args.decide)
         print_transcript(record, persona)
         if args.save:
             print("saved", save_record(record, HERE / "calls"))

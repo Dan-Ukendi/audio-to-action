@@ -132,6 +132,7 @@ class Facts(BaseModel):
     removed_number: bool = False
     refused_name: bool = False
     named_field: str | None = None  # the caller said WHICH detail is wrong but not the right value yet
+    caller_text: str = ""           # what the caller said (the agent of version B reads it; version A does not need it)
     silent: bool = False
     notes: list[str] = []
 
@@ -181,7 +182,7 @@ def repair_number(stored: str, text: str) -> str | None:
 def apply_turn(state: CallState, text: str, understanding: Understanding, persona: Persona, faq: dict[str, FaqEntry]) -> Facts:
     """Update the call state from one understood turn. Pure code: this is where 'never invent' is enforced."""
     turn, notes = ground(understanding.turn, text)  # again, idempotent: holds whatever understand_fn produced
-    facts = Facts(waiting_before=state.waiting_for, notes=notes)
+    facts = Facts(waiting_before=state.waiting_for, notes=notes, caller_text=text)
     danger = emergency_from_text(text)
 
     # A robocall is hung up on, EXCEPT when real safety words are in it: a person who says "final notice ... and I can smell

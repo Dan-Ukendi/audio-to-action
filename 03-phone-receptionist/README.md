@@ -91,6 +91,10 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 37 | The push for an urgent call | Sent the moment the call is flagged urgent (`LivePush`, minimal text), in a **background thread with one attempt**: a slow ntfy server (up to 10 s) must never make the caller hear silence in an emergency. It never raises. Hand-off waits for it; if it failed or is still running, hand-off sends Part 1's usual push with Part 1's retries. A later hand-off pushes only if the earlier one did not (judged from the stored row: `notified_at`, route `notify_now`, or the safety-net reason). The one exception is the safe direction: if the background push is still running after 15 s, the end push goes out as well and the phone may ring twice, never zero times. Dry run until NTFY is configured (`NTFY_DRY_RUN=1`). | |
 | 38 | When the model fails at hand-off | Plain code builds the analysis from the dialog's message and the row is flagged for review (`attempts = 2`, Part 1's "analysis needed a retry" rule). A bug (not a model/network error) is not swallowed. | |
 | 39 | Re-handing a call off | One row per call (hash of the call id + the caller's words). A second hand-off **refreshes** the row (analysis, route, processed time) but never adds a row or a second push; if the first run did not push and the second finds urgency (for example `--analysis rules`, then `--analysis model`), the second pushes. The record is saved before the hand-off, so a failed push loses nothing: re-run `handoff.py`. | Like Part 1's "re-running on the same file does nothing", except that new information is kept. |
+| 40 | What the agent (version B) is allowed to decide | Only `decide`: which legal action comes next. The state machine's own decision is always one legal option; three more are allowed where judgement can matter: ask what to change instead of repeating an unclear read-back, let go a caller whose "anything else?" answer is unclear, stop asking and read back after a refusal. Everything else (understanding, grounding, `apply_turn`, emergencies, spam, silence, limits, every sentence) is shared with version A. | The plan's tools `ask / answer_faq / read_back / flag_urgent / take_message / end_call`; `ask` also covers the follow-ups (`correction`, `anything_else`, `what_else`, `repeat`). |
+| 41 | No tool takes a value | The agent cannot name, number or reason anything: those come from `apply_turn`, grounded in the caller's words. A test checks no tool has such a field. | "Values copied by code" from Part 2. |
+| 42 | Fallback | If the agent fails (model error, prose instead of tools, step limit 4, no progress, only illegal choices) the state machine's own decision is used and the turn is logged `fallback: true` with the reason. The evaluation counts fallbacks (pre-registered rule: at most 10 % of turns). | A call never depends on the model behaving. |
+| 43 | `flag_urgent` | The agent may flag a call urgent that the safety words missed (once; refused if already flagged). The acknowledgement and the urgent goodbye follow even if the agent then fails. The code-side safety floor (acknowledgement, advice, "I'll pass your question on") is said whatever the agent does. | |
 
 
 (More rows are added below as later phases take decisions.)
@@ -137,7 +141,7 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 | 2 | Audio loop + speed budget | built; **the speeds are not measured** (laptop only), see `docs/part3-speed.md` | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` |
 | 3 | Dialog version A | built (tested with the rules baseline; **the model prompt is untested on a real model**) | `turn.py`, `rules_turn.py`, `dialog.py`, `faq.py`, `safety.py`, `call.py`, `spoken.py` |
 | 4 | Hand-off to Part 1 | built (analysis tested with a fake model; **the call prompt `call-v1` has not met a real model**) | `handoff.py`, `shared/analyze.py` (`call-v1`) |
-| 5 | Dialog version B (agent) | not started | |
+| 5 | Dialog version B (agent) | built (tested with scripted tool calls; **never run with a real model**) | `agent_dialog.py` |
 | 6 | Evaluation | not started | |
 | 7 | Polish | not started | |
 
@@ -172,6 +176,9 @@ pip install -r requirements.txt                     # installs streamlit too
 nvidia-smi                                          # the RTX 5050 must be listed without "Code 43"
 ollama ps                                           # while a model runs: PROCESSOR should say 100% GPU
 python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests 03-phone-receptionist\tests -q
+
+# Phase 5: the agent (needs Ollama; a failing agent falls back to the state machine and says so)
+python 03-phone-receptionist\call.py --card dev --understand model --decide b
 
 # Phase 4: hand a saved call to Part 1 (needs Ollama for --analysis model)
 python 03-phone-receptionist\handoff.py 03-phone-receptionist\calls\*.json --analysis rules   # no model; writes 01-voicemail-triage\voicemails.db

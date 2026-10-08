@@ -14,9 +14,11 @@ What happens, in order (the order of Part 1's deliver(): decide, push, THEN save
                           row is marked for review (attempts = 2).
   3. route()              Part 1's routing, unchanged: category -> route, Part 1's safety-word net, review flags.
   4. push                 minimal text, no caller data (Part 1's rule); a dry run unless NTFY is configured. A call flagged urgent
-                          during the call was pushed THEN (LivePush, in the background) and is not pushed again here.
+                          during the call was pushed THEN (LivePush, in the background); if that push failed or is still
+                          running, this step sends it, with Part 1's retries.
   5. save()               Part 1's store.save(): one row keyed by a hash of the call. Handing the same call off again refreshes that row
-                          (it never adds a row or a second push).
+                          (it never adds a row, and never a second push unless the first hand-off did not push and this one
+                          finds urgency).
 
 A call is recognisable in the table by source_file = "call-<id>.json" (Part 1's table has no source column and is not changed).
 
