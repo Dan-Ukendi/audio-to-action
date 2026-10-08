@@ -1778,3 +1778,56 @@ Expected: the tests pass; a transcript where Holly asks for the spelling and rea
 
 ### 9. Next phase preview
 Phase 4 hands a finished call to the Part 1 pipeline: analyze the caller's side, route it, push if urgent, and store it in `voicemails.db`.
+
+## Part 3, Phase 4: Hand-off to Part 1 (2026-10-08)
+
+### 1. What we built
+A finished call becomes a row in Part 1's `voicemails.db`, handled exactly like a voicemail: the caller's side is analysed, Part 1's routing
+decides what happens, an urgent call is pushed (a dry run until NTFY is configured), and the row is saved. Calls are recognisable by
+`source_file = call-<id>.json`. The receptionist's side of the conversation never goes to the analysis.
+
+### 2. Where it fits in the pipeline
+```
+ call ─► listen ─► understand ─► decide ─► speak ─► ... ─► END OF CALL
+                                     │ urgent? ─► LivePush (while the caller is still on the line)
+                                     ▼
+   handoff.hand_off: caller's words ─► Part 1 analyze (call-v1) ─► routing.route ─► push (if not already) ─► store.save
+ [Phase 4: handoff.py + the call-v1 prompt in shared/analyze.py]  <-- you are here
+```
+
+### 3. How it works, step by step
+- `call_transcript()` builds a Part 1 `Transcript` from the caller's answers (one segment per answer; Whisper's confidence is passed on, so unclear audio is flagged by Part 1's own rule).
+- `analysis_for_call()`: robocalls, info-only and silent calls get an analysis from plain code. Others go to `analyze(..., prompt_version="call-v1")`; then `merge_model_analysis()` puts the dialog's checked name and number over the model's and keeps an urgent call urgent. If the model fails, plain code builds it and the row is flagged for review.
+- `route()` (Part 1, unchanged) decides notify / inbox / archive and the review flags; `hand_off()` adds a reason line ("phone call, outcome ..., flagged urgent in turn 1").
+- `LivePush` sends the minimal "Urgent call in progress" push the moment `run_call` flags the call; `hand_off()` does not push twice. Push first, save second (Part 1's at-least-once order).
+- `save()` (Part 1) upserts by a hash of the call: handing the same call off again changes nothing.
+
+### 4. Key concepts I should understand
+- **Reuse, don't copy:** routing, safety words, push text, retries and storage are Part 1's own functions; a call and a voicemail cannot disagree about what is urgent.
+- **Check the model against what was checked:** the model sees the words; the dialog verified them with the caller. For name and number the dialog wins.
+- **Push first, save second:** a crash can repeat a push (harmless) but cannot lose one (not harmless for a gas leak).
+- **Idempotency is a hash:** same call, same row, no second push.
+
+### 5. Files created or changed
+- New: `handoff.py`, `tests/test_handoff.py`. Changed: `shared/analyze.py` (a new prompt version `call-v1` and the user-message label; v2/v3 untouched), `call.py` (`CallRecord.handoff`).
+
+### 6. Try it yourself
+```powershell
+python 03-phone-receptionist\call.py --card dev --understand rules --save
+python 03-phone-receptionist\handoff.py 03-phone-receptionist\calls\*.json --analysis rules
+python 01-voicemail-triage\store.py
+```
+Expected: one row per call; the gas call routed `notify_now` (a dry-run push is logged), the robocall `archive`, the others `inbox`.
+
+### 7. What can go wrong
+- `call-v1` has only been run against a fake model here. A real model may need the prompt tuned (dev calls only).
+- NTFY is a dry run until a real random topic is set in `.env`; nothing is sent to anyone.
+- A model that judges an urgent-flagged call "not urgent" is overruled on purpose; a model that finds urgency the dialog missed is trusted.
+
+### 8. Check my understanding
+1. Why does the row's caller name come from the dialog and not from the model?
+2. Why is an urgent call pushed in the middle of the call and not only at the end?
+3. What stops the same call from creating two rows or two pushes?
+
+### 9. Next phase preview
+Phase 5 builds version B: the same receptionist, but the choice of the next action is made by a boxed tool-calling agent (with Part 2's guardrails) instead of the state machine, so the two can be compared on the same callers.

@@ -87,6 +87,7 @@ class CallRecord(BaseModel):
     cut_off: bool = False
     total_s: float
     final_state: dict
+    handoff: dict | None = None            # filled by handoff.py: the Part 1 row this call became
 
 
 def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_fn, channel=None, decide_fn=dialog.decide_a,

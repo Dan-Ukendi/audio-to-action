@@ -63,7 +63,7 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 9 | Spelling | When the caller has given a first and last name, Holly asks once for the *full name* to be spelled (unless they already spelled it). A single first name is not spelled. | The two hardest Part 1 names are first names (Siobhan, Wojciech), so spelling only the surname would not help. Costs one turn of the 12. The spelled letters are matched back to the heard name in code (Phase 3). |
 | 10 | Silence rule | "Silent twice" = **two empty turns in a row** (a turn with speech resets the count). | Friendlier; the 12-turn limit bounds the call anyway. |
 | 11 | Calls in `voicemails.db` | Part 1's table has no "source" column and Part 1's `save()` uses positional columns, so it is **not changed**. A call is stored with `source_file = "call-<id>.json"`; `source_file LIKE 'call-%'` finds them. | Conservative: no schema migration of a database the owner already uses. |
-| 12 | Part 1 analysis of a call | Pre-decision for Phase 4 (it will be confirmed or changed there): `analyze(..., cache_dir=None)` (no cache: its key has no hint fingerprint, HANDOVER 9), run on the **caller's side of the conversation only**. The dialog's own verified name and number replace whatever the model says for those two fields. | |
+| 12 | Part 1 analysis of a call (confirmed in Phase 4) | `analyze(..., cache_dir=None, prompt_version="call-v1")` on the **caller's side only** (one answer per line). `call-v1` = Part 1's v2 prompt + three sentences saying it is a phone call; added to `shared/analyze.py` as a NEW prompt version (v2/v3 untouched) and its user-message label says "Phone call" instead of "Voicemail transcript". The dialog's own verified name and number replace the model's for those two fields; a call flagged urgent during the call stays urgent. | No cache: its key has no hint fingerprint (HANDOVER 9). |
 | 13 | Test cards: dev and score split | Each caller card has `split: dev` or `score`. Prompts and rules may be tuned on `dev` cards only; `evaluate.py` scores `score` cards by default. | Plan lesson: never tune on the cards you score with. |
 | 14 | Streamlit version | `streamlit>=1.40` in `requirements.txt` (`st.audio_input` appeared in 1.39). The laptop has 1.65. | |
 | 15 | Which callers, and what they do | The 18 Part 1 scenarios become calls (same speakers, same labels). The 6 FAQ callers, their questions, all scripted openings and every quirk are mine; see `testset/README.md`. 9 dev cards (c03, c07, c11, c13, c14, c18, f01, f03, f04) cover the core behaviours once (emergency, refused number, robocall, wrong-then-corrected number, spelled name, in-sentence correction, a question, info-only, an unanswerable question); the other 15 are for scoring only. Behaviours only the scoring run sees: a caller who withholds the name or number, an all-in-one opening, a rambling opening, two questions in one turn and a new request after "anything else?". | The plan asked for "4-6 FAQ callers"; replace any card, `cards.py` re-checks the key. |
@@ -87,6 +87,10 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 33 | Naming the wrong detail | "No, the number is wrong" (or "Number." after "what should I change?") makes Holly ask for exactly that detail; the answer then changes only that detail. A bare "no" asks "what should I change?" up to twice. | |
 | 34 | Read-backs are capped | The message is read back at most 1 + 2 times; a caller who keeps saying no, or says goodbye at the read-back, gets a goodbye and the message stays unconfirmed (`caller_ended`). A "yes" that contains a late "no" ("Yeah no, that's wrong") is a no. | Max 2 re-asks per detail applies to read-backs too. |
 | 35 | Late corrections | After "anything else?" a corrected or late name/number ("actually my number is ...") is stored and the message is read back again; a plain "yes" asks "what else?" once. | |
+| 36 | Calls that need no model | Robocalls, info-only calls and silent calls get their analysis from plain code (exact, instant). Only calls that carry a message use the model. An info-only call is stored, but is not flagged "missing name/number" (Part 1's rule would, wrongly, for a caller who only asked the opening hours). | Plan: "every completed call lands in `voicemails.db`": info-only and spam calls do too. |
+| 37 | The push for an urgent call | Sent the moment the call is flagged urgent (`LivePush`, minimal text, retried twice, never raises: a failed push must not end the call). It is not sent again at hand-off; if it failed, hand-off sends Part 1's usual push. Dry run until NTFY is configured (`NTFY_DRY_RUN=1`). | |
+| 38 | When the model fails at hand-off | Plain code builds the analysis from the dialog's message and the row is flagged for review (`attempts = 2`, Part 1's "analysis needed a retry" rule). A bug (not a model/network error) is not swallowed. | |
+| 39 | Re-handing a call off | Idempotent: one row per call (hash of the call id + the caller's words); no second push. | Like Part 1's "re-running on the same file does nothing". |
 
 
 (More rows are added below as later phases take decisions.)
@@ -132,7 +136,7 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 | 1 | Synthetic callers (cards + labels + simulator) | built | `testset/callers.json`, `cards.py`, `simulate.py`, `spoken.py`, `asks.py`, `testset/README.md` |
 | 2 | Audio loop + speed budget | built; **the speeds are not measured** (laptop only), see `docs/part3-speed.md` | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` |
 | 3 | Dialog version A | built (tested with the rules baseline; **the model prompt is untested on a real model**) | `turn.py`, `rules_turn.py`, `dialog.py`, `faq.py`, `safety.py`, `call.py`, `spoken.py` |
-| 4 | Hand-off to Part 1 | not started | |
+| 4 | Hand-off to Part 1 | built (analysis tested with a fake model; **the call prompt `call-v1` has not met a real model**) | `handoff.py`, `shared/analyze.py` (`call-v1`) |
 | 5 | Dialog version B (agent) | not started | |
 | 6 | Evaluation | not started | |
 | 7 | Polish | not started | |
@@ -168,6 +172,10 @@ pip install -r requirements.txt                     # installs streamlit too
 nvidia-smi                                          # the RTX 5050 must be listed without "Code 43"
 ollama ps                                           # while a model runs: PROCESSOR should say 100% GPU
 python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests 03-phone-receptionist\tests -q
+
+# Phase 4: hand a saved call to Part 1 (needs Ollama for --analysis model)
+python 03-phone-receptionist\handoff.py 03-phone-receptionist\calls\*.json --analysis rules   # no model; writes 01-voicemail-triage\voicemails.db
+python 01-voicemail-triage\store.py                                                       # Part 1's summary of the table (calls are the rows named call-*.json)
 
 # Phase 3: simulated calls (the rules run anywhere; 'model' needs Ollama with qwen2.5:7b)
 python 03-phone-receptionist\call.py --card dev --understand rules      # no model: a quick look at the dialog

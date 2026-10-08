@@ -67,10 +67,18 @@ CALLBACK NUMBER:
 - null if no number is spoken (for example "you've got my number"). Never guess.
 """
 
+# call-v1 (Part 3): the same rules as v2, for what a caller said to the automated receptionist during a phone call.
+CALL_NOTE = """
+THIS IS A PHONE CALL, NOT A VOICEMAIL. The text is only what the caller said to an automated receptionist, one answer per line.
+The receptionist's questions are not shown, so a name or a number on its own line is usually the answer to "what is your name?"
+or "what is the best number to call you back on?". The caller knew they were talking to an automated assistant and that the
+call was recorded. Judge urgency, category and the summary from everything the caller said.
+"""
+
 V2_EXAMPLE = '"this is Rachel from Acme" -> "Rachel".'
 V3_EXAMPLE = '"this is Rachel Moore from Acme" -> "Rachel Moore". Keep the full name when one is given.'
 assert V2_EXAMPLE in PROMPT_V2  # the experiment must change exactly this one line
-PROMPTS = {"v2": PROMPT_V2, "v3": PROMPT_V2.replace(V2_EXAMPLE, V3_EXAMPLE)}
+PROMPTS = {"v2": PROMPT_V2, "v3": PROMPT_V2.replace(V2_EXAMPLE, V3_EXAMPLE), "call-v1": PROMPT_V2 + CALL_NOTE}
 
 # Which prompt the pipeline uses by default (Phase 6 decides: see docs/eval-results.md).
 DEFAULT_PROMPT_VERSION = os.getenv("ANALYSIS_PROMPT", "v2")
@@ -103,7 +111,8 @@ def analyze(transcript: Transcript, cache_dir: str | Path | None = None, llm: st
 
     messages = [
         {"role": "system", "content": PROMPTS[prompt_version]},
-        {"role": "user", "content": f"Voicemail transcript:\n<<<\n{transcript.text}\n>>>"},
+        {"role": "user", "content": f"{'Phone call (what the caller said, one answer per line)' if prompt_version.startswith('call') else 'Voicemail transcript'}:"
+                                    f"\n<<<\n{transcript.text}\n>>>"},
     ]
     try:
         reply = structured_chat(Analysis, messages, llm=llm, fix_hint=FIX_HINT)
