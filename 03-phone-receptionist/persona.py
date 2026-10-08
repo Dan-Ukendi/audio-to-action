@@ -56,7 +56,8 @@ class Persona:
     business: str
     receptionist: str
     speaker: int | None  # Piper speaker id; None until the owner picks a voice on the laptop
-    taken_voice_ids: frozenset[int]  # ids already used by Part 1 callers and Part 2 meetings
+    taken_voice_ids: frozenset[int]  # every id the receptionist must not use (Part 1/2 voices + the Part 3 FAQ callers)
+    part_voice_ids: frozenset[int]  # only the Part 1 callers and Part 2 meeting voices
     hint: str  # Whisper initial_prompt: business, team and places (never caller names)
     detail_order: tuple[str, ...]
     max_turns: int
@@ -107,7 +108,9 @@ def load_persona(path: str | Path = DEFAULT_PERSONA) -> Persona:
     order = tuple(data["detail_order"])
     if sorted(order) != sorted(DETAILS):
         raise PersonaError(f"detail_order must be a permutation of {DETAILS}, got {order}")
-    taken = frozenset(i for ids in data["voice_ids_taken"].values() for i in ids)
+    groups = data["voice_ids_taken"]
+    taken = frozenset(i for ids in groups.values() for i in ids)
+    part_ids = frozenset(i for name in ("part2_meeting_voices", "part1_callers") for i in groups[name])
     speaker = data["piper_speaker"]
     check_speaker(speaker)
     if speaker is not None and speaker in taken:
@@ -122,7 +125,7 @@ def load_persona(path: str | Path = DEFAULT_PERSONA) -> Persona:
     hint = (f"{data['business']} phone call, answered by {data['receptionist']}. "
             f"The team: {', '.join(team[:-1])} and {team[-1]}. Places: {', '.join(places)}.")
     return Persona(
-        business=data["business"], receptionist=data["receptionist"], speaker=speaker, taken_voice_ids=taken,
+        business=data["business"], receptionist=data["receptionist"], speaker=speaker, taken_voice_ids=taken, part_voice_ids=part_ids,
         hint=hint, detail_order=order, max_turns=limits["max_turns"], max_reasks=limits["max_reasks_per_detail"],
         max_silent_turns=limits["max_silent_turns"], lines=dict(lines),
     )

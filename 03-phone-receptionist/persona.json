@@ -6,7 +6,8 @@
   "piper_speaker_note": "null until the owner picks a voice on the laptop in Phase 2 (python 03-phone-receptionist/choose_voice.py, written in Phase 2). Must not be in voice_ids_taken. The RECEPTIONIST_SPEAKER environment variable overrides this value for a single run.",
   "voice_ids_taken": {
     "part2_meeting_voices": [7, 0, 9, 11],
-    "part1_callers": [3, 5, 11, 15, 25, 27, 33, 40, 45, 50, 55, 60, 64, 72, 80, 90]
+    "part1_callers": [3, 5, 11, 15, 25, 27, 33, 40, 45, 50, 55, 60, 64, 72, 80, 90],
+    "faq_callers_part3": [18, 22, 29, 38, 47, 58]
   },
   "whisper_hint": {
     "_about": "Proper nouns Whisper should spell right. Deliberately NO customer or caller names: the caller's name is what we score, so hinting it would inflate the result.",
@@ -23,7 +24,7 @@
     "greeting": "Hello, you've reached Brightwater Plumbing and Heating. This is Holly, the automated assistant. This call is recorded. How can I help you today?",
     "ask_reason": "Could you tell me briefly what your call is about?",
     "ask_name": "Could I take your name, please?",
-    "ask_name_spelling": "Thank you, {first_name}. Could you spell your last name for me, letter by letter?",
+    "ask_name_spelling": "Thank you, {first_name}. Could you spell your full name for me, letter by letter?",
     "ask_number": "And what is the best number to call you back on?",
     "number_refused": "I'm sorry, I don't have your number from this call. Could you give me a number to reach you on?",
     "repeat_request": "Sorry, I didn't catch that. Could you say that again?",

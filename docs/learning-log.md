@@ -1594,3 +1594,63 @@ Expected: the tests pass; Holly's greeting; `oh one six three two, nine six oh, 
 ### 9. Next phase preview
 Phase 1 writes the synthetic callers: one "caller card" for each of the 18 Part 1 voicemails plus a few FAQ callers, with the
 answer key, before any dialog code exists. A scripted simulator answers whatever Holly asks, from the card.
+
+## Part 3, Phase 1: Synthetic callers (2026-10-08)
+
+### 1. What we built
+The answer key and the practice callers for the receptionist, before any dialog code exists. 24 "caller cards": the 18 Part 1
+voicemails turned into phone calls, plus 6 callers who ask FAQ questions. A scripted caller (`simulate.py`) answers whatever the
+receptionist asks, from its card, and can say it aloud in the card's voice with phone-line noise. A checker (`cards.py`) proves the
+answer key matches Part 1's labels.
+
+### 2. Where it fits in the pipeline
+```
+ Part 3: caller ─► listen ─► understand ─► decide ─► speak ─► ... ─► hand off to Part 1
+ [Phase 1: the synthetic caller + answer key that every later phase is measured against]  <-- you are here
+   card ─► SimulatedCaller.reply(question type) ─► text ─► Piper + noise + phone band ─► wav
+```
+
+### 3. How it works, step by step
+- `testset/callers.json`: each card has facts (name, number, how to pronounce a hard name), quirks (refuses the number, spells the
+  name, corrects the number, robocall, ...), the caller's opening words, an optional question and the expected outcome.
+- `cards.load_cards()` reads the cards and **reads** the category/urgency/name/number labels of the 18 Part 1 scenarios from
+  Part 1's `labels.json`. `check_cards()` finds every inconsistency (names, numbers, voices, FAQ ids, urgent vs category, ...).
+- `asks.py`: the list of question types ("name", "number", "read-back", "anything else", ...). `SimulatedCaller.reply(asked)` answers by
+  question type, never by reading the receptionist's sentence; the one exception is the read-back, where it checks the name and number.
+- `spoken.py`: `digit_runs()` turns "oh seven seven double oh, nine hundred, one two three" or "01632 960 501" into digits;
+  `letter_runs()` turns "S, I, O, B, H, A, N" into SIOBHAN. A correction ("four three, no sorry, three four nine") stays as separate runs.
+- `simulate.render_turn()`: Piper voice (`shared/tts.py`), then Part 1's noise and phone-band filter, then a 16 kHz wav for Whisper.
+
+### 4. Key concepts I should understand
+- **Answer key first:** the cards and labels exist before the dialog, so a dialog bug can never move the goalposts.
+- **Dev and score cards:** you may tune on 9 cards; 15 are only for the final score. Tuning on the scoring cards would measure memory.
+- **One answer key, not two:** Part 1's labels are read, never copied, so the two parts cannot disagree.
+- **A checker must be able to fail:** the tests break a card on purpose (wrong name, missing topic, taken voice) and expect a complaint.
+
+### 5. Files created or changed
+- `testset/callers.json`, `testset/README.md`: the 24 cards and their documentation.
+- `cards.py`, `simulate.py`, `spoken.py`, `asks.py`: loader/checker, scripted caller, number and spelling parser, question types.
+- `tests/test_cards.py`, `test_simulate.py`, `test_spoken.py`; `persona.json`: "spell your full name".
+
+### 6. Try it yourself
+```powershell
+python 03-phone-receptionist\cards.py
+python 03-phone-receptionist\simulate.py --preview c14
+python -m pytest 03-phone-receptionist\tests -q
+```
+Expected: "24 cards: 9 dev ... 15 score" and "caller cards are consistent..."; card c14 spelling its name letter by letter; all tests pass.
+On the laptop (needs the Piper voice): `python 03-phone-receptionist\simulate.py --audio c14` writes the opening turn as a wav.
+
+### 7. What can go wrong
+- The audio path (Piper voice, noise, ffmpeg) is tested here with a fake voice and a real ffmpeg; the real Piper voices were not run.
+- "Oh" in ordinary speech reads as a zero, so always ask `digit_runs` for runs of at least 8 digits when looking for a phone number.
+- The FAQ callers' names and numbers are invented; the 18 others are Part 1's.
+
+### 8. Check my understanding
+1. Why does the simulated caller answer by question type instead of reading the receptionist's sentence?
+2. What would go wrong if the dialog were tuned on the `score` cards?
+3. Why is the label for the Mum card "no number" even though the caller is asked for one twice?
+
+### 9. Next phase preview
+Phase 2 builds the audio loop: listen (Whisper) and speak (Piper) for one turn, a push-to-talk page in the browser, and the scripts that
+measure how long each stage takes on the laptop. The measurements themselves cannot be made in the cloud.

@@ -58,7 +58,9 @@ def test_greeting_says_she_is_automated_and_the_call_is_recorded():
 
 def test_taken_voice_ids_match_parts_1_and_2():
     assert PART2_VOICES == {7, 0, 9, 11}  # if this fails, the walk above no longer finds Part 2's voices
-    assert load_persona().taken_voice_ids == frozenset(PART1_VOICES | PART2_VOICES)
+    p = load_persona()
+    assert p.part_voice_ids == frozenset(PART1_VOICES | PART2_VOICES)
+    assert p.taken_voice_ids == p.part_voice_ids | {18, 22, 29, 38, 47, 58}  # + the Part 3 FAQ callers
 
 
 def test_voice_is_not_chosen_yet_and_asking_for_it_explains_why(monkeypatch):

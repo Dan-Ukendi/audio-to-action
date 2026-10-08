@@ -1,0 +1,933 @@
+{
+  "_about": "The caller cards: the INPUT side and the ANSWER KEY of the Part 3 test set, written BEFORE any dialog code exists so the dialog cannot influence what 'correct' means. One card per Part 1 voicemail (18, 'part1_id'; their category/urgency/name/number labels are read from 01-voicemail-triage/testset/labels.json, never copied) plus 6 FAQ callers (their own 'labels'). Setting: Brightwater Plumbing & Heating (fictional). All phone numbers come from Ofcom's fictional ranges (07700 900xxx, 01632 960xxx).",
+  "_fields": {
+    "split": "dev = the cards you may look at and tune prompts/rules on; score = the cards evaluate.py scores. Never tune on score cards.",
+    "voice": "Piper speaker id (en_GB-vctk-medium), speed (length_scale, >1 slower), noise (0 = clean), phone (narrow 8 kHz band). FAQ-caller ids are new and different from Parts 1-2 and from the receptionist.",
+    "facts": "what is true about the caller. name/number MUST equal the labels (a test checks). name_spoken = how the text-to-speech must say a hard name (phonetic, as in Part 1's scripts). reason_keywords: the recorded reason must contain at least one.",
+    "quirks": "how the caller behaves: all_upfront, hesitant, refuses_number, withholds_name, withholds_number, self_corrects_number, wrong_number_first, spells_name, robocall, rambles, emergency, question_only",
+    "script": "what the caller says. opening = the first turn, written for the voice (numbers as words). Placeholders: {name_spoken}, {number_words}. Optional: reason, name, number, number_again (answers to the receptionist's questions; sensible defaults exist), anything_else = answers to 'anything else?' in order (default 'No, that's all, thank you.').",
+    "question": "a question the caller asks. topic = the faq.json id that should answer it, or null if faq.json has no answer (the receptionist must say so and pass the question on). text is part of script.opening or script.anything_else.",
+    "expect": "urgent_flag: the receptionist must flag the call as urgent DURING the call. outcome: completed (a message was taken), spam (short goodbye), info_only (only questions, no message). faq_topics: the entries that must be answered. faq_unknown: a question with no entry. safety: which safety advice (gas, co, water) the emergency fast path must give, when there is one."
+  },
+  "cards": [
+    {
+      "id": "c01_burst_pipe",
+      "part1_id": "01_urgent_burst_pipe",
+      "split": "score",
+      "about": "clear urgent baseline; the caller gives reason, name and number in one go, so nothing should be asked again",
+      "voice": {
+        "speaker": 3,
+        "speed": 0.95,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Mark Thompson",
+        "name_spoken": "Mark Thompson",
+        "number": "07700900123",
+        "reason_keywords": [
+          "pipe",
+          "burst",
+          "water",
+          "ceiling",
+          "leak"
+        ]
+      },
+      "quirks": [
+        "all_upfront",
+        "emergency"
+      ],
+      "script": {
+        "opening": "Hi, this is Mark Thompson. A pipe has burst under my kitchen sink and there's water everywhere, it's coming through the ceiling downstairs. I need someone out today please. My number is {number_words}."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": true,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false,
+        "safety": "water"
+      }
+    },
+    {
+      "id": "c02_no_heating_elderly",
+      "part1_id": "02_urgent_no_heating_elderly",
+      "split": "score",
+      "about": "urgent because of vulnerability (no heating, 84 years old), not because of a safety word; slow speaker",
+      "voice": {
+        "speaker": 11,
+        "speed": 1.2,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Margaret Ellis",
+        "name_spoken": "Margaret Ellis",
+        "number": "01632960456",
+        "reason_keywords": [
+          "boiler",
+          "heating",
+          "hot water"
+        ]
+      },
+      "quirks": [
+        "emergency"
+      ],
+      "script": {
+        "opening": "Hello. My boiler stopped working last night and I've got no heating and no hot water at all. I'm eighty-four and it's very cold in the house.",
+        "reason": "My boiler has stopped and I've no heating or hot water.",
+        "name": "Margaret Ellis, dear."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": true,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c03_gas_smell",
+      "part1_id": "03_urgent_gas_smell",
+      "split": "dev",
+      "about": "safety emergency; hesitant speech with fillers; the caller asks what to do",
+      "voice": {
+        "speaker": 27,
+        "speed": 0.8,
+        "noise": 0.02,
+        "phone": true
+      },
+      "facts": {
+        "name": "Priya Shah",
+        "name_spoken": "Priya Shah",
+        "number": "07700900882",
+        "reason_keywords": [
+          "gas",
+          "smell",
+          "boiler"
+        ]
+      },
+      "quirks": [
+        "hesitant",
+        "emergency"
+      ],
+      "script": {
+        "opening": "Yeah hi, um, there's a smell of gas in the hallway, like quite strong, near the boiler cupboard. I've opened the windows. I don't know if I should, I mean, should I turn it off?"
+      },
+      "question": {
+        "topic": "safety_gas",
+        "text": "should I turn it off?"
+      },
+      "expect": {
+        "urgent_flag": true,
+        "outcome": "completed",
+        "faq_topics": [
+          "safety_gas"
+        ],
+        "faq_unknown": false,
+        "safety": "gas"
+      }
+    },
+    {
+      "id": "c04_vague_leak",
+      "part1_id": "04_urgent_vague_leak",
+      "split": "score",
+      "about": "vague but escalating problem; first name only; 'you've got my number' must give no number, never a guess",
+      "voice": {
+        "speaker": 45,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Dave",
+        "name_spoken": "Dave",
+        "number": null,
+        "reason_keywords": [
+          "leak",
+          "flats",
+          "worse"
+        ]
+      },
+      "quirks": [
+        "refuses_number",
+        "emergency"
+      ],
+      "script": {
+        "opening": "Hi, it's Dave from the flats on Station Road. It's about the leak again, it's got a lot worse since this morning. Can you get someone to call me back as soon as possible?",
+        "number": "You've got my number.",
+        "number_again": "It should be on your system, I'm not going to read it out. Cheers."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": true,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c05_noisy_water_heater",
+      "part1_id": "05_urgent_noisy_water_heater",
+      "split": "score",
+      "about": "heavy background noise; water heater leaking and sparking near the electrics; house number in the reason must not become the phone number",
+      "voice": {
+        "speaker": 60,
+        "speed": 0.95,
+        "noise": 0.09,
+        "phone": true
+      },
+      "facts": {
+        "name": "Tom Bradley",
+        "name_spoken": "Tom Bradley",
+        "number": "07700900345",
+        "reason_keywords": [
+          "water heater",
+          "leak",
+          "sparking",
+          "electrics"
+        ]
+      },
+      "quirks": [
+        "emergency"
+      ],
+      "script": {
+        "opening": "Hi, sorry about the noise, I'm on site. The water heater at forty-two Mill Lane is leaking badly and the tenant says it's sparking near the electrics. We need someone there this afternoon.",
+        "name": "It's Tom Bradley, from Bradley Lettings."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": true,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false,
+        "safety": "water"
+      }
+    },
+    {
+      "id": "c06_landlord_deadline",
+      "part1_id": "06_urgent_landlord_deadline",
+      "split": "score",
+      "about": "urgent because of a hard deadline (tenants tomorrow 9 am); error code F28 must not be confused with a phone number",
+      "voice": {
+        "speaker": 72,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Helen Carter",
+        "name_spoken": "Helen Carter",
+        "number": "01632960789",
+        "reason_keywords": [
+          "boiler",
+          "tenants",
+          "error",
+          "tonight"
+        ]
+      },
+      "quirks": [
+        "emergency"
+      ],
+      "script": {
+        "opening": "Good morning, my name is Helen Carter. I've got new tenants moving into my property at nine o'clock tomorrow morning and the boiler is showing an error code, F twenty-eight. It has to be working before they arrive, so ideally tonight."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": true,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c07_personal_mum",
+      "part1_id": "07_personal_mum",
+      "split": "dev",
+      "about": "personal call, a relationship word instead of a name, no number at all",
+      "voice": {
+        "speaker": 11,
+        "speed": 1.05,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Mum",
+        "name_spoken": "Mum",
+        "number": null,
+        "reason_keywords": [
+          "lunch",
+          "sunday",
+          "roast"
+        ]
+      },
+      "quirks": [
+        "refuses_number"
+      ],
+      "script": {
+        "opening": "Hi love, it's Mum. Just checking you're still coming for Sunday lunch, your dad's doing the roast.",
+        "number": "He's got my number, love.",
+        "number_again": "Oh he knows it, don't worry about that."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c08_personal_friend",
+      "part1_id": "08_personal_friend_football",
+      "split": "score",
+      "about": "personal call with a number and a soft deadline (Thursday)",
+      "voice": {
+        "speaker": 33,
+        "speed": 0.95,
+        "noise": 0.02,
+        "phone": true
+      },
+      "facts": {
+        "name": "Jamie",
+        "name_spoken": "Jamie",
+        "number": "07700900551",
+        "reason_keywords": [
+          "five a side",
+          "thursday",
+          "pitch"
+        ]
+      },
+      "quirks": [],
+      "script": {
+        "opening": "Alright mate, it's Jamie. Five a side is moved to Thursday this week, eight o'clock, same pitch.",
+        "number": "I've got a new phone by the way, so save this one, it's {number_words}."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c09_sales_supplier",
+      "part1_id": "09_sales_boiler_supplier",
+      "split": "score",
+      "about": "a trade sales call that is relevant to the business but is still sales",
+      "voice": {
+        "speaker": 50,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Rachel",
+        "name_spoken": "Rachel",
+        "number": "01632960222",
+        "reason_keywords": [
+          "promotion",
+          "boilers",
+          "supplies",
+          "trade"
+        ]
+      },
+      "quirks": [],
+      "script": {
+        "opening": "Hello, this is Rachel from Northern Heating Supplies. We're running a trade promotion this month, fifteen percent off all combi boilers for registered installers.",
+        "name": "It's Rachel."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c10_sales_seo",
+      "part1_id": "10_sales_seo",
+      "split": "score",
+      "about": "a cold call from a company with no person name: the caller declines to give a name but gives a number",
+      "voice": {
+        "speaker": 90,
+        "speed": 0.9,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": null,
+        "name_spoken": null,
+        "number": "07700900777",
+        "reason_keywords": [
+          "google",
+          "first page",
+          "business",
+          "digital"
+        ]
+      },
+      "quirks": [
+        "withholds_name"
+      ],
+      "script": {
+        "opening": "Hi there, I'm calling from Top Rank Digital. We noticed your plumbing business isn't on the first page of Google, and we can guarantee to get you there within thirty days.",
+        "name": "I'd rather not give a name, just say it was Top Rank Digital.",
+        "name_again": "Just Top Rank Digital, thanks."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c11_spam_tax_robocall",
+      "part1_id": "11_spam_tax_robocall",
+      "split": "dev",
+      "about": "scam robocall with threatening language and 'press one'",
+      "voice": {
+        "speaker": 5,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": null,
+        "name_spoken": null,
+        "number": null,
+        "reason_keywords": []
+      },
+      "quirks": [
+        "robocall"
+      ],
+      "script": {
+        "opening": "This is an automated message from the tax office. Our records show an unpaid balance on your account. Legal proceedings will begin against you. To speak to an officer, press one now."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "spam",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c12_spam_fake_urgent",
+      "part1_id": "12_spam_fake_urgent_listing",
+      "split": "score",
+      "about": "says 'urgent' three times but is a robocall: must NOT be flagged urgent",
+      "voice": {
+        "speaker": 5,
+        "speed": 0.9,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": null,
+        "name_spoken": null,
+        "number": null,
+        "reason_keywords": []
+      },
+      "quirks": [
+        "robocall"
+      ],
+      "script": {
+        "opening": "Urgent. This is an urgent message regarding your Google business listing. Your listing will be suspended today unless you verify your details immediately. Press one to speak to a listing specialist. This is your final notice."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "spam",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c13_appointment_confirm",
+      "part1_id": "13_other_appointment_confirm",
+      "split": "dev",
+      "about": "routine confirmation; the name is volunteered up front; the caller first gives a number that is wrong in its last three digits and corrects it at the read-back",
+      "voice": {
+        "speaker": 64,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Laura Jenkins",
+        "name_spoken": "Laura Jenkins",
+        "number": "07700900204",
+        "reason_keywords": [
+          "appointment",
+          "thursday",
+          "radiator"
+        ]
+      },
+      "quirks": [
+        "wrong_number_first"
+      ],
+      "script": {
+        "opening": "Hi, it's Laura Jenkins. Just confirming the appointment on Thursday morning to fit the new radiator in the back bedroom. I'll be in from eight."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c14_quote_hard_name",
+      "part1_id": "14_other_quote_hard_name",
+      "split": "dev",
+      "about": "a name speech recognition cannot spell; the caller spells it when asked",
+      "voice": {
+        "speaker": 80,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Siobhan Gallagher",
+        "name_spoken": "Shiv awn Gallagher",
+        "number": "01632960501",
+        "reason_keywords": [
+          "bathroom",
+          "quote",
+          "shower"
+        ]
+      },
+      "quirks": [
+        "spells_name"
+      ],
+      "script": {
+        "opening": "Hello, I'm looking for a quote to redo our bathroom, new shower, toilet and sink. No rush, sometime in the next month would be great."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c15_unspelled_name",
+      "part1_id": "15_other_unspelled_name",
+      "split": "score",
+      "about": "a Polish name that is only ever said, never spelled until the receptionist asks; the caller then spells it",
+      "voice": {
+        "speaker": 40,
+        "speed": 1.05,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Wojciech Nowak",
+        "name_spoken": "Voy chek Novak",
+        "number": "07700900618",
+        "reason_keywords": [
+          "tap",
+          "dripping",
+          "outside"
+        ]
+      },
+      "quirks": [
+        "spells_name"
+      ],
+      "script": {
+        "opening": "Hi, I would like someone to look at my outside tap, it is dripping. It is not urgent."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c16_rambling_tap",
+      "part1_id": "16_other_rambling_tap",
+      "split": "score",
+      "about": "a long rambling opening with the number buried in the middle and a question about price at the end",
+      "voice": {
+        "speaker": 15,
+        "speed": 1.1,
+        "noise": 0.03,
+        "phone": true
+      },
+      "facts": {
+        "name": "Brenda Walsh",
+        "name_spoken": "Brenda Walsh",
+        "number": "01632960314",
+        "reason_keywords": [
+          "tap",
+          "dripping",
+          "bathroom"
+        ]
+      },
+      "quirks": [
+        "rambles"
+      ],
+      "script": {
+        "opening": "Oh hello, yes, I'm ringing about, well, it's a bit of a long story really, my neighbour recommended you, she had her kitchen done, lovely job, anyway, my bathroom tap has been dripping for, oh, must be weeks now, it's not a big problem, I just put a cup under it, my number's {number_words}, anyway my husband says he can fix it but he's been saying that since the summer. How much do you charge an hour, roughly?"
+      },
+      "question": {
+        "topic": "prices",
+        "text": "How much do you charge an hour, roughly?"
+      },
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [
+          "prices"
+        ],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c17_no_info",
+      "part1_id": "17_other_no_info",
+      "split": "score",
+      "about": "no name, no number, no real request: everything stays empty and is flagged for review later",
+      "voice": {
+        "speaker": 25,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": null,
+        "name_spoken": null,
+        "number": null,
+        "reason_keywords": [
+          "call back"
+        ]
+      },
+      "quirks": [
+        "withholds_name",
+        "withholds_number"
+      ],
+      "script": {
+        "opening": "Hi, yeah, it's me. Can you give me a call back when you get a sec. Cheers.",
+        "reason": "Just ask him to give me a call back.",
+        "name": "Oh, he knows who I am.",
+        "name_again": "He'll know, just say it's me.",
+        "number": "He's got my number.",
+        "number_again": "Yeah, he's got it, thanks."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "c18_number_corrected",
+      "part1_id": "18_other_number_corrected",
+      "split": "dev",
+      "about": "the caller corrects the number inside the same sentence; the corrected number is the right one",
+      "voice": {
+        "speaker": 55,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Chris Okafor",
+        "name_spoken": "Chris Okafor",
+        "number": "07700900349",
+        "reason_keywords": [
+          "boiler",
+          "service",
+          "book"
+        ]
+      },
+      "quirks": [
+        "self_corrects_number"
+      ],
+      "script": {
+        "opening": "Hi, it's Chris Okafor. I'd like to book in a boiler service sometime next week."
+      },
+      "question": null,
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "f01_radiator_how_soon",
+      "part1_id": null,
+      "split": "dev",
+      "about": "a normal job plus a question in the first turn (how soon): the receptionist answers it and still takes the message",
+      "voice": {
+        "speaker": 18,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Nadia Hussain",
+        "name_spoken": "Nadia Hussain",
+        "number": "07700900402",
+        "reason_keywords": [
+          "radiator",
+          "heat"
+        ]
+      },
+      "quirks": [],
+      "script": {
+        "opening": "Hi, I've got a radiator in the lounge that won't heat up. How soon could someone come out to look at it?"
+      },
+      "question": {
+        "topic": "booking_time",
+        "text": "How soon could someone come out to look at it?"
+      },
+      "labels": {
+        "category": "other",
+        "urgency": 1,
+        "caller_name": "Nadia Hussain",
+        "callback_number": "07700900402"
+      },
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [
+          "booking_time"
+        ],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "f02_boiler_service_price",
+      "part1_id": null,
+      "split": "score",
+      "about": "wants a boiler service and asks the price in the same breath",
+      "voice": {
+        "speaker": 22,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Owen Parry",
+        "name_spoken": "Owen Parry",
+        "number": "01632960833",
+        "reason_keywords": [
+          "boiler",
+          "service"
+        ]
+      },
+      "quirks": [],
+      "script": {
+        "opening": "Hello, I'd like to book a boiler service. How much does that cost?"
+      },
+      "question": {
+        "topic": "boiler_service",
+        "text": "How much does that cost?"
+      },
+      "labels": {
+        "category": "other",
+        "urgency": 1,
+        "caller_name": "Owen Parry",
+        "callback_number": "01632960833"
+      },
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [
+          "boiler_service"
+        ],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "f03_opening_hours_only",
+      "part1_id": null,
+      "split": "dev",
+      "about": "only wants the opening hours; no message: the receptionist answers, asks if there is anything else and says goodbye",
+      "voice": {
+        "speaker": 29,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": null,
+        "name_spoken": null,
+        "number": null,
+        "reason_keywords": []
+      },
+      "quirks": [
+        "question_only"
+      ],
+      "script": {
+        "opening": "Hi, what are your opening hours on a Saturday?",
+        "anything_else": [
+          "No, that's all, thanks very much."
+        ]
+      },
+      "question": {
+        "topic": "hours",
+        "text": "What are your opening hours on a Saturday?"
+      },
+      "labels": {
+        "category": "other",
+        "urgency": 1,
+        "caller_name": null,
+        "callback_number": null
+      },
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "info_only",
+        "faq_topics": [
+          "hours"
+        ],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "f04_solar_panels_unknown",
+      "part1_id": null,
+      "split": "dev",
+      "about": "a question faq.json cannot answer: the receptionist must say she will pass it on (never guess), then takes a message",
+      "voice": {
+        "speaker": 38,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Gareth Lloyd",
+        "name_spoken": "Gareth Lloyd",
+        "number": "01632960955",
+        "reason_keywords": [
+          "solar"
+        ]
+      },
+      "quirks": [],
+      "script": {
+        "opening": "Hello, do you fit solar panels?",
+        "reason": "I'd like a quote for solar panels on the roof, please could someone call me back."
+      },
+      "question": {
+        "topic": null,
+        "text": "Do you fit solar panels?"
+      },
+      "labels": {
+        "category": "other",
+        "urgency": 1,
+        "caller_name": "Gareth Lloyd",
+        "callback_number": "01632960955"
+      },
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [],
+        "faq_unknown": true
+      }
+    },
+    {
+      "id": "f05_area_and_payment",
+      "part1_id": null,
+      "split": "score",
+      "about": "two questions in one turn (area, payment); when asked if there is anything else the caller adds a real request",
+      "voice": {
+        "speaker": 47,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Imani Clarke",
+        "name_spoken": "Imani Clarke",
+        "number": "07700900566",
+        "reason_keywords": [
+          "bathroom",
+          "quote"
+        ]
+      },
+      "quirks": [],
+      "script": {
+        "opening": "Hi, do you cover Overmere, and can I pay by card?",
+        "anything_else": [
+          "Yes, actually, I'd like a quote for a new bathroom, please.",
+          "No, that's everything, thank you."
+        ]
+      },
+      "question": {
+        "topic": "area",
+        "text": "Do you cover Overmere, and can I pay by card?"
+      },
+      "labels": {
+        "category": "other",
+        "urgency": 1,
+        "caller_name": "Imani Clarke",
+        "callback_number": "07700900566"
+      },
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [
+          "area",
+          "payment"
+        ],
+        "faq_unknown": false
+      }
+    },
+    {
+      "id": "f06_cancellation_policy",
+      "part1_id": null,
+      "split": "score",
+      "about": "might move an appointment and asks the cancellation policy",
+      "voice": {
+        "speaker": 58,
+        "speed": 1.0,
+        "noise": 0,
+        "phone": true
+      },
+      "facts": {
+        "name": "Rhys Bevan",
+        "name_spoken": "Rhys Bevan",
+        "number": "01632960288",
+        "reason_keywords": [
+          "appointment",
+          "friday",
+          "move"
+        ]
+      },
+      "quirks": [],
+      "script": {
+        "opening": "Hi, I've got an appointment on Friday and I might need to move it. What's your cancellation policy?"
+      },
+      "question": {
+        "topic": "cancellation",
+        "text": "What's your cancellation policy?"
+      },
+      "labels": {
+        "category": "other",
+        "urgency": 1,
+        "caller_name": "Rhys Bevan",
+        "callback_number": "01632960288"
+      },
+      "expect": {
+        "urgent_flag": false,
+        "outcome": "completed",
+        "faq_topics": [
+          "cancellation"
+        ],
+        "faq_unknown": false
+      }
+    }
+  ]
+}
