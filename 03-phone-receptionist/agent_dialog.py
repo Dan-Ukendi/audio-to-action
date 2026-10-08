@@ -24,6 +24,7 @@ agent can change WHICH legal action comes next, never WHAT is said and never WHA
     agent does. The agent is only asked about the part where judgement can matter.
 """
 
+import copy
 import json
 import sys
 import time
@@ -57,7 +58,8 @@ just said, the details we have, and the list of LEGAL NEXT ACTIONS.
 3. Call flag_urgent(why) only if the caller describes danger or damage happening now, or a vulnerable person without heating or hot
    water, and the state does not already say "Urgent: yes".
 Rules: ask one thing at a time, for the detail the state says is next. Never ask for a detail we already have. take_message() is only for
-after the caller said yes to the read-back. end_call() only when the caller is finished, wants to leave, or the call is going nowhere.
+after the caller said yes to the read-back, or when the state says the caller added a further request (it is added to the
+message). end_call() only when the caller is finished, wants to leave, or the call is going nowhere.
 If a tool answers ERROR, read it and choose a legal action.
 """
 
@@ -87,7 +89,7 @@ class TakeMessageArgs(BaseModel):
 
 
 class EndCallArgs(BaseModel):
-    why: Literal["caller_finished", "caller_left", "nothing_more_to_do"]
+    why: Literal["caller_finished", "caller_left", "nothing_more_to_do"] = "caller_finished"
 
 
 TOOLS: dict[str, tuple[type[BaseModel], str]] = {
@@ -133,6 +135,7 @@ class Turn:
     answered: list[Action] = field(default_factory=list)
     flagged: list[Action] = field(default_factory=list)
     terminal: list[Action] | None = None
+    give_up: list[str] = field(default_factory=list)   # refused details that a read_back chosen now gives up (like the state machine)
 
 
 def build_turn(state: CallState, facts: Facts, persona: Persona) -> Turn:
@@ -147,11 +150,37 @@ def build_turn(state: CallState, facts: Facts, persona: Persona) -> Turn:
         legal["ask:correction"] = [Action(kind="ask_correction")]        # not understood: ask what to change instead of repeating
     if state.state == dialog.GOODBYE and kind == "anything_else":
         legal["end_call"] = [Action(kind="goodbye", arg=dialog.goodbye_kind(state))]  # an unclear answer: let them go
-    if (state.state in (dialog.GREETING, dialog.COLLECTING) and kind == "ask" and (facts.refused_name or facts.refused_number)
-            and any(s.value for s in state.slots.values())):
+    give_up = [d for d, refused in (("name", facts.refused_name), ("number", facts.refused_number)) if refused and not state.value(d)]
+    if (state.state in (dialog.GREETING, dialog.COLLECTING) and kind == "ask" and give_up
+            and any(s.value for s in state.slots.values()) and nothing_else_missing(state, persona, give_up)):
         legal["read_back"] = [Action(kind="read_back")]                  # they refused: respect it, read back what we have
     pending = [a.arg for a in candidate if a.kind == "faq"]
-    return Turn(state, facts, persona, candidate, floor, pending, legal)
+    return Turn(state, facts, persona, candidate, floor, pending, legal, give_up=give_up)
+
+
+def nothing_else_missing(state: CallState, persona: Persona, given_up: list[str]) -> bool:
+    """Would the state machine have nothing left to ask once the refused details are given up? (tried on a copy)"""
+    trial = copy.deepcopy(state)
+    for detail in given_up:
+        trial.slots[detail].given_up = True
+    return dialog.next_missing(trial, persona) is None
+
+
+def keep_urgent_legal(turn: Turn) -> None:
+    """After flag_urgent: an urgent call asks for the number before anything else and skips the spelling, like version A."""
+    st = turn.state
+    if st.value("number") is not None or dialog.exhausted(st.slots["number"], turn.persona):
+        return
+    dropped = ("end_call", "read_back", "ask:spelling")
+    nxt = dialog.next_missing(st, turn.persona)
+    fixed = [Action(kind="ask", arg=nxt)] if nxt else None
+    for key in dropped:
+        turn.legal.pop(key, None)
+    if fixed:
+        turn.legal.setdefault(f"ask:{nxt}", fixed)
+    prefix = [a for a in turn.candidate if a.kind in PREFIX_KINDS]
+    if fixed and terminal_key([a for a in turn.candidate if a.kind not in PREFIX_KINDS]) in dropped:
+        turn.candidate = prefix + fixed
 
 
 def refresh_goodbye(actions: list[Action], state: CallState) -> list[Action]:
@@ -191,6 +220,7 @@ def run_tool(turn: Turn, name: str, raw_args: dict) -> str:
             return "ERROR: the call is already flagged urgent. Do not flag it again."
         turn.state.urgent, turn.state.urgent_turn = True, turn.state.turns
         turn.flagged.append(Action(kind="urgent_ack"))
+        keep_urgent_legal(turn)
         return "OK, the call is flagged urgent; the acknowledgement will be said."
 
     # everything else ends the turn: the agent must have answered the questions first, and the action must be legal
@@ -201,11 +231,10 @@ def run_tool(turn: Turn, name: str, raw_args: dict) -> str:
     if key not in turn.legal:
         return f"ERROR: {key.replace(':', '(')}{')' if ':' in key else '()'} is not legal now. {advice(turn, key)} Legal now: {legal_text(turn)}."
     turn.terminal = refresh_goodbye(turn.legal[key], turn.state)
-    if key == "read_back" and turn.candidate and terminal_key([a for a in turn.candidate if a.kind not in PREFIX_KINDS]) != "read_back":
-        # reading back although a detail is still missing (the caller refused it): that detail is given up, like the state machine does
-        missing = dialog.next_missing(turn.state, turn.persona)
-        if missing in ("name", "number"):
-            turn.state.slots[missing].given_up = True
+    if key == "read_back" and turn.give_up and terminal_key([a for a in turn.candidate if a.kind not in PREFIX_KINDS]) != "read_back":
+        # reading back although a refused detail is missing: only the refused detail is given up, like the state machine does
+        for detail in turn.give_up:
+            turn.state.slots[detail].given_up = True
     return f"OK, {key.replace(':', '(')}{')' if ':' in key else '()'} will be done."
 
 
@@ -213,7 +242,7 @@ def advice(turn: Turn, key: str) -> str:
     """What to do instead of an illegal choice (a bare 'not legal' just gets repeated by a model)."""
     st, f = turn.state, turn.facts
     if key == "take_message":
-        return "The caller has not said yes to a read-back. Use read_back() when nothing is missing, otherwise ask(the next missing detail)."
+        return "The caller has not said yes to a read-back or added a request. Use read_back() when nothing is missing, otherwise ask(the next missing detail)."
     if key == "end_call":
         return "The caller has not finished and the message is not complete. Keep going with ask(...) or read_back()."
     if key == "read_back":
@@ -232,14 +261,15 @@ def state_message(turn: Turn, feedback: list[str], max_turns: int) -> str:
     known = ", ".join(f"{d}={st.value(d)!r}" for d in dialog.DETAILS if st.value(d)) or "nothing yet"
     given_up = [d for d in dialog.DETAILS if st.slots[d].given_up and not st.value(d)]
     lines = [f"Turn {st.turns} of {max_turns}. State: {st.state}. The receptionist is waiting for: {st.waiting_for}.",
-             f'The caller said: "{f.caller_text}"',
+             f"The caller said: {json.dumps(f.caller_text)}",
              f"Details we have: {known}." + (f" Given up on: {', '.join(given_up)}." if given_up else ""),
              f"Urgent: {'yes' if st.urgent else 'no'}.",
-             "This turn the caller: " + ", ".join(x for x in (
+             "This turn the caller: " + (", ".join(x for x in (
                  "said yes" if f.yes else "", "said no" if f.no else "", "wants to end the call" if f.wants_to_end else "",
                  "asked to repeat" if f.asks_repeat else "", "refused to give their number" if f.refused_number else "",
-                 "refused to give their name" if f.refused_name else "", f"gave/changed {', '.join(f.changed)}" if f.changed else "") if x)
-             .strip(", ") or "said nothing that changes the details."]
+                 "refused to give their name" if f.refused_name else "", f"gave/changed {', '.join(f.changed)}" if f.changed else "",
+                 f"added a further request: {json.dumps(f.extra_request)}" if f.extra_request else "") if x)
+                 or "said nothing that changes the details.")]
     lines.append("Questions to answer: " + (", ".join(turn.pending_faq) if turn.pending_faq else "none") + ".")
     lines.append(f"LEGAL NEXT ACTIONS (choose exactly one after the questions): {legal_text(turn)}")
     if feedback:

@@ -343,11 +343,48 @@ def test_a_random_agent_cannot_break_any_invariant():
             assert re.fullmatch(f"(?:{piece.pattern})(?: (?:{piece.pattern}))*", entry["reply"]) or entry["reply"] == "", (n, entry["reply"])
 
 
-def test_an_agent_that_flags_urgent_and_then_ends_the_call_still_gives_the_urgent_promise():
+def test_after_flag_urgent_the_call_cannot_be_ended_while_the_number_is_pending_like_in_version_a():
     s = new()
-    chat = scripted([tc("flag_urgent", why="gas"), tc("end_call", why="caller_left")])
+    _, s, _ = say(s, "My tap is dripping. I'm Dave.", scripted([tc("ask", detail="number")]))
+    chat = scripted([tc("flag_urgent", why="gas"), tc("end_call", why="caller_left")], [tc("ask", detail="number")])
     reply, s, trace = say(s, "Bye.", chat, wants_to_end=True)
-    assert s.urgent and reply == f"{line('urgent_ack')} {line('goodbye_urgent')}" and "nine nine nine" in reply
+    assert s.urgent and reply == f"{line('urgent_ack')} {line('ask_number')}" and "end_call" not in trace["legal"]
+    assert any("not legal" in (t.get("result") or "") for t in trace["trace"])
+
+
+def test_after_flag_urgent_a_fallback_asks_for_the_number_not_the_spelling_or_a_goodbye():
+    s = new()
+    _, s, _ = say(s, "My tap is dripping. I'm Dave Smith.", scripted([tc("ask", detail="number")]))
+    chat = scripted([tc("flag_urgent", why="gas")], [tc("take_message")], [tc("take_message")], [tc("take_message")])
+    reply, s, trace = say(s, "Bye.", chat, wants_to_end=True)
+    assert trace["fallback"] and line("ask_number") in reply and "nine nine nine" not in reply
+
+
+def test_a_name_refusal_does_not_let_the_agent_skip_the_number_that_is_still_missing():
+    s = new()
+    _, s, _ = say(s, "My tap is dripping.", scripted([tc("ask", detail="name")]))
+    reply, s, trace = say(s, "I'd rather not say", scripted([tc("read_back")], [tc("ask", detail="name")]), refused_name=True)
+    assert "read_back" not in trace["legal"] and not s.slots["number"].given_up and s.state != "READ_BACK"
+
+
+def test_end_call_without_a_reason_works_and_the_state_message_describes_the_turn():
+    s = new()
+    _, s, _ = say(s, FULL, scripted([tc("read_back")]))
+    _, s, _ = say(s, "Yes", scripted([tc("take_message")]))
+    chat = scripted([tc("end_call")])
+    reply, s, trace = say(s, "No thanks", chat)
+    assert s.state == "ENDED" and reply == line("goodbye")
+    shown = chat.seen[0]["messages"][1]["content"]
+    assert "This turn the caller: said no" in shown and 'The caller said: "No thanks"' in shown
+
+
+def test_a_further_request_after_anything_else_may_be_taken_by_take_message():
+    s = new()
+    _, s, _ = say(s, FULL, scripted([tc("read_back")]))
+    _, s, _ = say(s, "Yes", scripted([tc("take_message")]))
+    chat = scripted([tc("take_message")])
+    _, s, trace = say(s, "Also my boiler is leaking", chat, reason="my boiler is leaking")
+    assert not trace["fallback"] and "added a further request" in chat.seen[0]["messages"][1]["content"]
 
 
 def test_an_agent_that_flags_urgent_and_then_fails_still_gets_the_acknowledgement():
