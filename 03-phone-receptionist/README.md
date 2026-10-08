@@ -96,6 +96,9 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 42 | Fallback | If the agent fails (model error, prose instead of tools, step limit 4, no progress, only illegal choices) the state machine's own decision is used and the turn is logged `fallback: true` with the reason. The evaluation counts fallbacks (pre-registered rule: at most 10 % of turns). | A call never depends on the model behaving. |
 | 43 | `flag_urgent` | The agent may flag a call urgent that the safety words missed (once; refused if already flagged). The acknowledgement and the urgent goodbye follow even if the agent then fails. The code-side safety floor (acknowledgement, advice, "I'll pass your question on") is said whatever the agent does. | |
 
+| 44 | Which calls are scored | The `score` split by default (the 15 cards nobody tuned on); `--split dev` for tuning. Results are only written to the docs after a run with a real model. | The plan's rule: never tune on the cards used for scoring. |
+| 45 | What counts as a correct detail | Name or number "correct" in the null-aware sense: a caller who gives none must end with none (numbers compared as digits). The A-vs-B quality margin counts name-correct + number-correct over all scored cards. | Decision 13 and the pre-registered rule. |
+| 46 | Hand-off inside the evaluation | Every evaluated call is handed to Part 1 in an in-memory table with a recording sender: nothing touches `voicemails.db` or the phone. The push check compares with the card's Part 1 label (urgent = pushed, nothing else pushed). | Definition of done: urgent calls pushed, completed calls land in the table. |
 
 (More rows are added below as later phases take decisions.)
 
@@ -142,7 +145,7 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 | 3 | Dialog version A | built (tested with the rules baseline; **the model prompt is untested on a real model**) | `turn.py`, `rules_turn.py`, `dialog.py`, `faq.py`, `safety.py`, `call.py`, `spoken.py` |
 | 4 | Hand-off to Part 1 | built (analysis tested with a fake model; **the call prompt `call-v1` has not met a real model**) | `handoff.py`, `shared/analyze.py` (`call-v1`) |
 | 5 | Dialog version B (agent) | built (tested with scripted tool calls; **never run with a real model**) | `agent_dialog.py` |
-| 6 | Evaluation | not started | |
+| 6 | Evaluation | harness built and tested without a model; **no evaluation number exists** (laptop only), see `docs/part3-eval-results.md` | `evaluate.py`, `docs/part3-eval-notes.md` |
 | 7 | Polish | not started | |
 
 ## 6. Definition of done (draft, kept as in the plan)
@@ -194,6 +197,10 @@ python 03-phone-receptionist\choose_voice.py       # listen to testset\voice_sam
 python 03-phone-receptionist\measure_speed.py --device cpu  --whisper base small --llm qwen2.5:7b
 python 03-phone-receptionist\measure_speed.py --device cuda --whisper base small --llm qwen2.5:7b qwen2.5:3b   # after the GPU fix; ask before pulling qwen2.5:3b (~1.9 GB)
 python -m streamlit run 03-phone-receptionist\app.py   # push-to-talk page (prototype replies until the dialog is wired in)
+
+# Phase 6: the evaluation (needs Ollama; the audio run also Whisper + Piper). Rewrites docs\part3-eval-results.md
+python 03-phone-receptionist\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs
+python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs     # the real speed (median reply <= 5 s)
 ```
 Later phases add their own commands here.
 

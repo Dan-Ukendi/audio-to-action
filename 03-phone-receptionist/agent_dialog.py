@@ -171,7 +171,7 @@ def nothing_else_missing(state: CallState, persona: Persona, given_up: list[str]
 
 
 def keep_urgent_legal(turn: Turn) -> None:
-    """After flag_urgent: an urgent call asks for the number before anything else and skips the spelling, like version A."""
+    """On an urgent call (flagged by the dialog or by the agent): it asks for the number before anything else and skips the spelling, like version A."""
     st = turn.state
     if st.value("number") is not None or dialog.exhausted(st.slots["number"], turn.persona):
         return

@@ -1882,5 +1882,60 @@ Expected: the tests pass; on the laptop a transcript where "(agent fell back to 
 2. Why is it safe that `flag_urgent` exists although urgency is also detected by code?
 3. What does the equivalence test prove, and what does it not prove?
 
+### Review record
+Independent reviewer rounds: FAIL, FAIL, PASS. Round 1 forced: read-back after a name refusal must not skip the number; the urgent rules must hold after `flag_urgent`; `end_call` and the state message must match what is accepted. Round 2: the urgent rules must hold whoever flagged the call. Round 3: PASS.
+
 ### 9. Next phase preview
 Phase 6 runs every caller card through both versions, scores them (slot accuracy, invented numbers, urgent flagged, FAQ answers, turns, latency) and applies the A-vs-B rule that was written before any run. The numbers need the laptop's models.
+
+## Part 3, Phase 6: Evaluation harness (2026-10-08)
+
+### 1. What we built
+`evaluate.py`: it runs the caller cards through version A and version B, scores every call against the answer key, hands each call to Part 1
+(in memory), prints the definition-of-done table and applies the A-vs-B rule that was written before any run. **No evaluation number exists
+yet**: the cloud session has no models, so `docs/part3-eval-results.md` is an honest "NOT MEASURED" page with the laptop command. A run
+without a model prints a "harness check only" banner and never writes that file.
+
+### 2. Where it fits in the pipeline
+```
+ caller cards ─► run_call (A or B) ─► score_call (answer key) ─► summarize ─► dod_table / decide_ab ─► docs/part3-eval-results.md
+                      └─► hand_off (in-memory Part 1 table, recorded pushes) ─┘
+ [Phase 6: evaluate.py]  <-- you are here
+```
+
+### 3. How it works, step by step
+- `run_set()` runs each card with a fresh decide function and a recording push sender (nothing is sent).
+- `score_call()`: name/number classes (correct, wrong, missed, invented), invented number (digits the caller never said), urgent missed/false,
+  FAQ topics, replies made only of approved sentences, outcome, time per reply, agent fallbacks, hand-off route and push.
+- `decide_ab()` implements the four pre-registered rules literally; with one A run it cannot apply rule 4, so B cannot win.
+- `--repeat-a 2` runs A twice: the difference between the two runs is the noise B's advantage must beat.
+
+### 4. Key concepts I should understand
+- **Pre-registration:** the rule and its constants (2 details, +3 s, 10 %) exist in the README and in code before any result, so the result cannot choose the rule.
+- **Dev vs score cards:** prompts are tuned on 9 cards, scored on the other 15.
+- **Noise:** a model at temperature 0 still varies between runs; a gain smaller than that variation is not a result.
+- **Harness check vs measurement:** the rules baseline on dev cards proves the counting works; it says nothing about the real receptionist.
+
+### 5. Files created or changed
+- New: `evaluate.py`, `tests/test_evaluate.py`, `docs/part3-eval-notes.md`, `docs/part3-eval-results.md` (placeholder). Changed: `call.py` (`audio_channel_for`, shared by the CLI and the evaluation), README (decisions 44-46, commands).
+
+### 6. Try it yourself
+```powershell
+python -m pytest 03-phone-receptionist\tests\test_evaluate.py -q
+python 03-phone-receptionist\evaluate.py --split dev --understand rules --decide a --repeat-a 1     # harness check, no model
+python 03-phone-receptionist\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs   # the real evaluation (laptop)
+```
+Expected: the tests pass; the first command prints a "Harness check only" report; the last one rewrites `docs\part3-eval-results.md`.
+
+### 7. What can go wrong
+- The "approved sentence" check lets placeholders match anything, so it proves no sentence outside the approved set, not that a placeholder value is right (the invented-number and name checks cover values).
+- 15 score cards is a small set: a difference of one or two calls is within noise; that is why rule 4 exists.
+- Audio runs depend on Whisper's transcription of the caller voices; a low score can be the ear, not the dialog (the log keeps what was heard).
+
+### 8. Check my understanding
+1. Why can B not win when A was run only once?
+2. Why is a run with `--understand rules` never written to the results file?
+3. What does "invented number" mean here, and why is it a gate and not just a metric?
+
+### 9. Next phase preview
+Phase 7 wires the Streamlit receptionist page to the real dialog, polishes the README, writes HANDOVER section 13 (documents against code) and has a final reviewer check every claim.

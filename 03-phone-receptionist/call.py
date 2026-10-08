@@ -151,6 +151,21 @@ def print_transcript(record: CallRecord, persona: Persona) -> None:
           f"faq={m['faq_answered']} passed-on={m['unanswered_questions']} turns={len(record.turns)}")
 
 
+def audio_channel_for(card: Card, persona: Persona) -> AudioChannel:
+    """The real audio loop for one card (Piper + Whisper): laptop only. Without a chosen receptionist voice, replies stay text."""
+    import tempfile
+    from audio_io import listen, piper_synth, speak
+    from persona import PersonaError, speaker_id
+    from simulate import render_turn
+    try:
+        speaker = speaker_id(persona)
+    except PersonaError as problem:
+        print(f"(no receptionist voice yet: replies stay text. {problem})")
+        speaker = None
+    return AudioChannel(Path(tempfile.mkdtemp(prefix=f"{card.id}_")), persona.hint, speaker, render_turn, listen,
+                        lambda text, out, spk: speak(text, out, spk, synth_fn=piper_synth))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run simulated calls (a caller card talks to the receptionist).")
     parser.add_argument("--card", default="dev", help="a card id prefix (c14), 'dev', 'score' or 'all' (default: dev)")
@@ -184,19 +199,7 @@ def main(argv: list[str] | None = None) -> int:
         from agent_dialog import make_decide_b
         decide_fn = make_decide_b()
     for card in chosen:
-        channel = None
-        if args.audio:
-            import tempfile
-            from audio_io import listen, piper_synth, speak
-            from persona import PersonaError, speaker_id
-            from simulate import render_turn
-            try:
-                speaker = speaker_id(persona)
-            except PersonaError as problem:
-                print(f"(no receptionist voice yet: replies stay text. {problem})")
-                speaker = None
-            channel = AudioChannel(Path(tempfile.mkdtemp(prefix=f"{card.id}_")), persona.hint, speaker, render_turn, listen,
-                                   lambda text, out, spk: speak(text, out, spk, synth_fn=piper_synth))
+        channel = audio_channel_for(card, persona) if args.audio else None
         record = run_call(card, persona, faq, understand_fn, channel=channel, decide_fn=decide_fn, understand_label=label,
                           prompt_version=version, decide_label=args.decide)
         print_transcript(record, persona)
