@@ -1937,6 +1937,9 @@ Expected: the tests pass; the first command prints a "Harness check only" report
 2. Why is a run with `--understand rules` never written to the results file?
 3. What does "invented number" mean here, and why is it a gate and not just a metric?
 
+### Review record
+Independent reviewer rounds: FAIL, FAIL, PASS. Round 1 forced: a model run where the model silently failed must be marked invalid and never written; the audio run gets its own results file; pushes are counted from what was really sent; the push row is NOT MEASURED without a hand-off; an unexpected FAQ answer makes a card wrong; "inconclusive" only when the noise check is the only failed rule. Round 2: spam calls are not model failures; the write gate uses the effective audio flag; README section 8 order. Open (optional, not fixed): a no-voice audio run still uses the audio channel for timing (never written to the docs).
+
 ### 9. Next phase preview
 Phase 7 wires the Streamlit receptionist page to the real dialog, polishes the README, writes HANDOVER section 13 (documents against code) and has a final reviewer check every claim.
 
@@ -1985,3 +1988,6 @@ Expected: all tests pass; the page greets, listens, answers, and the side panel 
 
 ### 9. Next phase preview
 Part 3 is complete in code. Next: the laptop runs in README section 8, then the owner's review and merge.
+
+### Review record (Phase 7)
+Checked together with Phase 6 in rounds 2 and 3: the facts in HANDOVER section 13, the root README status and the page wiring matched the code; the stale cross-reference between README section 8 and HANDOVER 13.4 was fixed.
