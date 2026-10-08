@@ -71,6 +71,14 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 17 | The simulated caller checks the read-back | It notices a wrong name or number in Holly's read-back and corrects it (at most twice), like a real caller. Without this the correction flow would never run on the cards. | Deterministic. It checks the name (whole words) and the number; a caller who gave no name cannot object to an invented one (Holly's sentence would have to be parsed). |
 | 18 | The page before the dialog exists | `app.py` replies with a fixed sequence of persona lines whatever the caller says (and says so on screen). It is for checking what Whisper hears and for timing the loop, not a conversation. Without a chosen voice it shows replies as text. | Replaced by the dialog engine in Phase 3 / 7. |
 | 19 | When a turn counts as silence | Under 0.3 s of speech; or every segment above 0.6 no-speech probability; or the text is just "thank you / thanks (for watching) / you / bye / please subscribe" **and Whisper doubts it**: under 1.5 s of speech with confidence below -0.8, or (any length) a segment with no-speech probability above 0.3. A confident "Thank you." and a bare "Yes." / "Okay." are real answers and are kept. | The plan says "ignore turns under ~0.5 s"; 0.3 s keeps a one-word answer. The phrase list and the doubt rule are mine. All thresholds are constants at the top of `audio_io.py`. |
+| 20 | One extra field in the per-turn form | `is_automated` (robocall, recorded message, scam) is added to the plan's `CallerTurn` sketch, because "robocall -> short goodbye" needs a detector. Code also recognises "press one", "automated message", "final notice" without the model. | Spam is decided before urgency, so a robocall that says "urgent" three times is never flagged. |
+| 21 | Question, request or small talk | The FAQ answers question-shaped sentences only. "Can you give me a call back?" is a request (never an unknown question); "Hello?" and "Pardon?" are small talk; an information question with no FAQ entry is passed on in the message ("I'll pass your question on"). | Keywords first, the model may only pick among the entries (decision 25). |
+| 22 | When the model fails | After two invalid answers or an unreachable Ollama the plain-code baseline (`rules_turn.py`) understands the turn, the record says `fallback: true`, and the call goes on. | A call must never end because a model had a bad moment. |
+| 23 | What is stored as the reason | The model's short phrase if its content words are in the speech; otherwise the caller's own first sentence. Never a phrase the caller did not say. | Reads less neatly in the read-back, but is never invented. |
+| 24 | Refusals and re-asks | After a refused name or number: one more try, then recorded as "not given". Any other missing detail: asked up to 3 times (first ask + 2 re-asks), then dropped. | The plan's "ask again once" and "max 2 re-asks per detail". |
+| 25 | The model's FAQ pick | Used only when no keyword matches; if keywords and model disagree, the keywords win (their facts come from the caller's words). | |
+| 26 | A topic answered once is not answered again in the same call | The caller is probably repeating themselves. | |
+| 27 | Tests use the rules baseline as the understanding step | Headless call tests (all 24 cards) check invariants (a call always ends, nothing is invented, emergencies fire, records are complete) and make exact assertions on dev cards only. They make **no accuracy claim**: accuracy needs the model (Phase 6). | |
 
 (More rows are added below as later phases take decisions.)
 
@@ -114,7 +122,7 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 | 0 | Plan, persona, FAQ, folders | built; the owner has not yet confirmed persona/FAQ wording, and the laptop GPU check is pending (decisions 1-4) | this file, `persona.json`, `faq.json`, `persona.py`, `faq.py` |
 | 1 | Synthetic callers (cards + labels + simulator) | built | `testset/callers.json`, `cards.py`, `simulate.py`, `spoken.py`, `asks.py`, `testset/README.md` |
 | 2 | Audio loop + speed budget | built; **the speeds are not measured** (laptop only), see `docs/part3-speed.md` | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` |
-| 3 | Dialog version A | not started | |
+| 3 | Dialog version A | built (tested with the rules baseline; **the model prompt is untested on a real model**) | `turn.py`, `rules_turn.py`, `dialog.py`, `faq.py`, `safety.py`, `call.py`, `spoken.py` |
 | 4 | Hand-off to Part 1 | not started | |
 | 5 | Dialog version B (agent) | not started | |
 | 6 | Evaluation | not started | |
@@ -151,6 +159,11 @@ pip install -r requirements.txt                     # installs streamlit too
 nvidia-smi                                          # the RTX 5050 must be listed without "Code 43"
 ollama ps                                           # while a model runs: PROCESSOR should say 100% GPU
 python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests 03-phone-receptionist\tests -q
+
+# Phase 3: simulated calls (the rules run anywhere; 'model' needs Ollama with qwen2.5:7b)
+python 03-phone-receptionist\call.py --card dev --understand rules      # no model: a quick look at the dialog
+python 03-phone-receptionist\call.py --card dev --understand model      # the LLM fills the per-turn form (use dev cards only while tuning)
+python 03-phone-receptionist\call.py --card c14 --understand model --audio --save   # full audio loop, saves calls\*.json
 
 # Phase 2: voice and speed (the numbers in docs\part3-speed.md exist only after this)
 python 03-phone-receptionist\choose_voice.py       # listen to testset\voice_samples\*.wav, set piper_speaker in persona.json

@@ -1,74 +1,388 @@
 {
-  "_about": "The ONLY facts the receptionist may give. Invented for the fictional business (Kelmbridge, 'Brightwater Plumbing & Heating'); only the three safety entries carry real UK advice. 'answer' is spoken text, said word for word: numbers are written as words because the text goes straight to the text-to-speech voice. 'keywords' are lowercase words or phrases matched on word boundaries; a longer phrase scores more. 'safety' marks the entries used by the emergency fast path.",
+  "_about": "The ONLY facts the receptionist may give. Invented for the fictional business (Kelmbridge, 'Brightwater Plumbing & Heating'); only the three safety entries carry real UK advice. 'answer' is spoken text, said word for word: numbers are written as words because the text goes straight to the text-to-speech voice. 'keywords' are lowercase words or phrases matched on word boundaries; a longer phrase scores more. 'safety' marks the entries used by the emergency fast path. 'fallback': true marks a generic entry (price questions such as 'how much does that cost?'): when the caller's question only hits a fallback entry, the sentence before it decides what 'that' is.",
   "entries": [
-    {"id": "hours", "topic": "Opening hours",
-     "keywords": ["opening hours", "opening times", "what time do you open", "what time do you close", "when are you open", "are you open", "open on saturday", "open on sunday", "open at weekends", "closing time", "open today", "open now", "hours"],
-     "answer": "We're open Monday to Friday from eight in the morning until half past five, and on Saturdays from nine until one. For emergencies we're available twenty-four hours a day, seven days a week."},
-    {"id": "emergency_callout", "topic": "Emergency call-out",
-     "keywords": ["emergency call out", "emergency callout", "call out charge", "callout charge", "out of hours", "outside office hours", "twenty four hour", "24 hour", "24 7", "at night", "emergency plumber", "how quickly can you come", "how fast can you", "how soon can you get here"],
-     "answer": "For emergencies we aim to be with you within two hours, at any time of day or night. Out of hours, the call-out charge is ninety-five pounds, which includes the first hour. After that it's sixty-five pounds an hour."},
-    {"id": "area", "topic": "Area covered",
-     "keywords": ["area do you cover", "areas do you cover", "areas you cover", "do you cover", "do you come to", "do you work in", "do you travel to", "how far do you", "which areas", "my area", "near me", "kelmbridge", "wexley green", "harrowfield", "thornsby cross", "overmere"],
-     "answer": "We cover Kelmbridge and everywhere within fifteen miles of it, including Wexley Green, Harrowfield, Thornsby Cross and Overmere."},
-    {"id": "services", "topic": "Services offered",
-     "keywords": ["what services", "what do you do", "services do you offer", "what do you offer", "do you fix", "do you install", "do you repair", "can you fix", "central heating", "radiators", "plumbing work"],
-     "answer": "We do boiler repairs, servicing and replacements, central heating and radiators, taps, leaks and general plumbing, landlord gas safety certificates, and bathroom fitting."},
-    {"id": "not_offered", "topic": "Work we do not do",
-     "keywords": ["electrical work", "electrician", "do you do electrical", "roofing", "roofer", "gardening", "blocked drain", "drain unblocking", "sewer", "gutters", "gutter"],
-     "answer": "We don't do electrical work, roofing, drain unblocking or gardening. For those you would need a different company."},
-    {"id": "boiler_service", "topic": "Boiler service price",
-     "keywords": ["boiler service", "service my boiler", "servicing my boiler", "annual service", "boiler servicing", "boiler check"],
-     "answer": "A boiler service costs eighty-five pounds."},
-    {"id": "landlord_certificate", "topic": "Landlord gas safety certificate",
-     "keywords": ["landlord gas safety", "gas safety certificate", "landlord certificate", "gas certificate", "landlord", "rental property"],
-     "answer": "A landlord gas safety certificate costs seventy pounds."},
-    {"id": "new_boilers", "topic": "New boilers",
-     "keywords": ["new boiler", "boiler replacement", "replace my boiler", "replacement boiler", "boiler install", "boiler survey", "worcester bosch", "worcester", "vaillant", "which boilers"],
-     "answer": "We fit Worcester Bosch and Vaillant boilers, and we offer a free survey before we give you a price."},
-    {"id": "bathrooms", "topic": "Bathrooms",
-     "keywords": ["new bathroom", "bathroom fitting", "bathroom quote", "bathroom refit", "shower installation", "bathroom", "deposit"],
-     "answer": "We fit new bathrooms. The quote is free, and we ask for a twenty-five percent deposit when you book the work."},
-    {"id": "prices", "topic": "Hourly rate",
-     "keywords": ["how much do you charge", "hourly rate", "per hour", "an hour", "your prices", "your rates", "what do you charge", "how much is", "how much does", "how much"],
-     "answer": "Our rate is fifty-five pounds an hour during office hours, with a minimum charge of one hour."},
-    {"id": "free_quotes", "topic": "Free quotes",
-     "keywords": ["free quote", "free estimate", "do you give quotes", "do you do quotes", "do you offer quotes", "quotation", "estimate", "quote"],
-     "answer": "Yes, our quotes are free."},
-    {"id": "booking_time", "topic": "How soon we can book a job",
-     "keywords": ["how long to book", "how long until you can", "when can you come", "how soon can you", "next available", "how long is the wait", "book an appointment", "availability", "how long will it take to book"],
-     "answer": "Jobs that aren't emergencies are usually booked in within three to five working days."},
-    {"id": "payment", "topic": "Payment",
-     "keywords": ["how do i pay", "how can i pay", "payment methods", "do you take card", "bank transfer", "do you accept", "payment", "cash", "cheque"],
-     "answer": "You can pay by card or by bank transfer."},
-    {"id": "guarantee", "topic": "Guarantee",
-     "keywords": ["guarantee", "guaranteed", "warranty", "workmanship"],
-     "answer": "All our work comes with a twelve-month labour guarantee."},
-    {"id": "qualifications", "topic": "Qualifications and insurance",
-     "keywords": ["gas safe", "are you insured", "insurance", "insured", "qualified", "registered", "certified", "accredited"],
-     "answer": "Our engineers are Gas Safe registered, and we carry five million pounds of insurance."},
-    {"id": "cancellation", "topic": "Cancellation",
-     "keywords": ["cancellation", "cancelling", "cancel", "reschedule", "change my appointment", "move my appointment"],
-     "answer": "You can cancel or change an appointment free of charge up to twenty-four hours before. After that there is a thirty pound cancellation fee."},
-    {"id": "vulnerable_priority", "topic": "Priority for vulnerable customers",
-     "keywords": ["vulnerable", "elderly", "pensioner", "disabled", "priority", "over sixty five", "medical condition"],
-     "answer": "Yes, we give priority to vulnerable customers, for example people who are elderly or ill and have no heating or hot water. Please tell us when you call."},
-    {"id": "contact", "topic": "Contact details",
-     "keywords": ["phone number", "telephone number", "email address", "e-mail", "email", "website", "web site", "contact details", "how can i contact", "how do i contact"],
-     "answer": "You can reach us on oh one six three two, nine six oh, oh oh oh. Our email is hello at brightwater dash plumbing dot example, and our website is w w w dot brightwater dash plumbing dot example."},
-    {"id": "callback_time", "topic": "Callback time",
-     "keywords": ["when will someone call", "when will you call", "how long until someone calls", "call me back", "ring me back", "get back to me", "callback", "call back"],
-     "answer": "In office hours, someone will call you back within two hours."},
-    {"id": "location", "topic": "Where the office is",
-     "keywords": ["where are you based", "where are you", "your address", "where is your office", "visit your office", "your office", "trading estate", "mill lane"],
-     "answer": "Our office is at Unit four, Mill Lane Trading Estate, Kelmbridge."},
-    {"id": "safety_gas", "topic": "Gas smell: what to do", "safety": "gas",
-     "keywords": ["smell gas", "smell of gas", "smelling gas", "smells of gas", "gas leak", "gas smell", "gas emergency"],
-     "answer": "If you smell gas, open doors and windows if you can, don't use any flames or electrical switches, turn off the gas at the meter if it's safe to reach, and leave the property. Then call the National Gas Emergency number on oh eight hundred, one one one, nine nine nine. If anyone feels unwell, call nine nine nine."},
-    {"id": "safety_co", "topic": "Carbon monoxide: what to do", "safety": "co",
-     "keywords": ["carbon monoxide", "co alarm", "co detector", "carbon monoxide alarm"],
-     "answer": "If your carbon monoxide alarm sounds, or anyone has a headache, dizziness or feels sick, open doors and windows on your way out, get everyone into fresh air, and stop using the appliance. Then call the National Gas Emergency number on oh eight hundred, one one one, nine nine nine. If anyone is ill, call nine nine nine, and get medical advice even if the symptoms are mild."},
-    {"id": "safety_water", "topic": "Water leak or flood: what to do", "safety": "water",
-     "keywords": ["water leak", "burst pipe", "pipe has burst", "pipe burst", "flooding", "flooded", "stopcock", "stop cock", "water everywhere", "through the ceiling", "leaking badly", "leaking"],
-     "answer": "If water is leaking, turn it off at the stopcock if you can reach it safely. If water is near electrics, switch the electricity off at the fuse box only if you can do it without standing in water, and keep away from wet sockets and appliances."}
+    {
+      "id": "hours",
+      "topic": "Opening hours",
+      "keywords": [
+        "opening hours",
+        "opening times",
+        "what time do you open",
+        "what time do you close",
+        "when are you open",
+        "are you open",
+        "open on saturday",
+        "open on sunday",
+        "open at weekends",
+        "closing time",
+        "open today",
+        "open now",
+        "hours"
+      ],
+      "answer": "We're open Monday to Friday from eight in the morning until half past five, and on Saturdays from nine until one. For emergencies we're available twenty-four hours a day, seven days a week."
+    },
+    {
+      "id": "emergency_callout",
+      "topic": "Emergency call-out",
+      "keywords": [
+        "emergency call out",
+        "emergency callout",
+        "call out charge",
+        "callout charge",
+        "out of hours",
+        "outside office hours",
+        "twenty four hour",
+        "24 hour",
+        "24 7",
+        "at night",
+        "emergency plumber",
+        "how quickly can you come",
+        "how fast can you",
+        "how soon can you get here"
+      ],
+      "answer": "For emergencies we aim to be with you within two hours, at any time of day or night. Out of hours, the call-out charge is ninety-five pounds, which includes the first hour. After that it's sixty-five pounds an hour."
+    },
+    {
+      "id": "area",
+      "topic": "Area covered",
+      "keywords": [
+        "area do you cover",
+        "areas do you cover",
+        "areas you cover",
+        "do you cover",
+        "do you come to",
+        "do you work in",
+        "do you travel to",
+        "how far do you",
+        "which areas",
+        "my area",
+        "near me",
+        "kelmbridge",
+        "wexley green",
+        "harrowfield",
+        "thornsby cross",
+        "overmere"
+      ],
+      "answer": "We cover Kelmbridge and everywhere within fifteen miles of it, including Wexley Green, Harrowfield, Thornsby Cross and Overmere."
+    },
+    {
+      "id": "services",
+      "topic": "Services offered",
+      "keywords": [
+        "what services",
+        "what do you do",
+        "services do you offer",
+        "what do you offer",
+        "do you fix",
+        "do you install",
+        "do you repair",
+        "can you fix",
+        "central heating",
+        "radiators",
+        "plumbing work"
+      ],
+      "answer": "We do boiler repairs, servicing and replacements, central heating and radiators, taps, leaks and general plumbing, landlord gas safety certificates, and bathroom fitting."
+    },
+    {
+      "id": "not_offered",
+      "topic": "Work we do not do",
+      "keywords": [
+        "electrical work",
+        "electrician",
+        "do you do electrical",
+        "roofing",
+        "roofer",
+        "gardening",
+        "blocked drain",
+        "drain unblocking",
+        "sewer",
+        "gutters",
+        "gutter"
+      ],
+      "answer": "We don't do electrical work, roofing, drain unblocking or gardening. For those you would need a different company."
+    },
+    {
+      "id": "boiler_service",
+      "topic": "Boiler service price",
+      "keywords": [
+        "boiler service",
+        "service my boiler",
+        "servicing my boiler",
+        "annual service",
+        "boiler servicing",
+        "boiler check"
+      ],
+      "answer": "A boiler service costs eighty-five pounds."
+    },
+    {
+      "id": "landlord_certificate",
+      "topic": "Landlord gas safety certificate",
+      "keywords": [
+        "landlord gas safety",
+        "gas safety certificate",
+        "landlord certificate",
+        "gas certificate",
+        "landlord",
+        "rental property"
+      ],
+      "answer": "A landlord gas safety certificate costs seventy pounds."
+    },
+    {
+      "id": "new_boilers",
+      "topic": "New boilers",
+      "keywords": [
+        "new boiler",
+        "boiler replacement",
+        "replace my boiler",
+        "replacement boiler",
+        "boiler install",
+        "boiler survey",
+        "worcester bosch",
+        "worcester",
+        "vaillant",
+        "which boilers"
+      ],
+      "answer": "We fit Worcester Bosch and Vaillant boilers, and we offer a free survey before we give you a price."
+    },
+    {
+      "id": "bathrooms",
+      "topic": "Bathrooms",
+      "keywords": [
+        "new bathroom",
+        "bathroom fitting",
+        "bathroom quote",
+        "bathroom refit",
+        "shower installation",
+        "bathroom",
+        "deposit"
+      ],
+      "answer": "We fit new bathrooms. The quote is free, and we ask for a twenty-five percent deposit when you book the work."
+    },
+    {
+      "id": "prices",
+      "topic": "Hourly rate",
+      "keywords": [
+        "how much do you charge",
+        "hourly rate",
+        "per hour",
+        "an hour",
+        "your prices",
+        "your rates",
+        "what do you charge",
+        "how much is",
+        "how much does",
+        "how much"
+      ],
+      "answer": "Our rate is fifty-five pounds an hour during office hours, with a minimum charge of one hour.",
+      "fallback": true
+    },
+    {
+      "id": "free_quotes",
+      "topic": "Free quotes",
+      "keywords": [
+        "free quote",
+        "free estimate",
+        "do you give quotes",
+        "do you do quotes",
+        "do you offer quotes",
+        "quotation",
+        "estimate",
+        "quote"
+      ],
+      "answer": "Yes, our quotes are free."
+    },
+    {
+      "id": "booking_time",
+      "topic": "How soon we can book a job",
+      "keywords": [
+        "how long to book",
+        "how long until you can",
+        "when can you come",
+        "how soon can you",
+        "next available",
+        "how long is the wait",
+        "book an appointment",
+        "availability",
+        "how long will it take to book",
+        "how soon could someone",
+        "how soon could you",
+        "how soon",
+        "when could someone",
+        "when could you come",
+        "when can someone"
+      ],
+      "answer": "Jobs that aren't emergencies are usually booked in within three to five working days."
+    },
+    {
+      "id": "payment",
+      "topic": "Payment",
+      "keywords": [
+        "how do i pay",
+        "how can i pay",
+        "payment methods",
+        "do you take card",
+        "bank transfer",
+        "do you accept",
+        "payment",
+        "cash",
+        "cheque",
+        "pay by card",
+        "pay by",
+        "can i pay",
+        "pay with",
+        "pay in cash",
+        "take cards",
+        "accept cards"
+      ],
+      "answer": "You can pay by card or by bank transfer."
+    },
+    {
+      "id": "guarantee",
+      "topic": "Guarantee",
+      "keywords": [
+        "guarantee",
+        "guaranteed",
+        "warranty",
+        "workmanship"
+      ],
+      "answer": "All our work comes with a twelve-month labour guarantee."
+    },
+    {
+      "id": "qualifications",
+      "topic": "Qualifications and insurance",
+      "keywords": [
+        "gas safe",
+        "are you insured",
+        "insurance",
+        "insured",
+        "qualified",
+        "registered",
+        "certified",
+        "accredited"
+      ],
+      "answer": "Our engineers are Gas Safe registered, and we carry five million pounds of insurance."
+    },
+    {
+      "id": "cancellation",
+      "topic": "Cancellation",
+      "keywords": [
+        "cancellation",
+        "cancelling",
+        "cancel",
+        "reschedule",
+        "change my appointment",
+        "move my appointment"
+      ],
+      "answer": "You can cancel or change an appointment free of charge up to twenty-four hours before. After that there is a thirty pound cancellation fee."
+    },
+    {
+      "id": "vulnerable_priority",
+      "topic": "Priority for vulnerable customers",
+      "keywords": [
+        "vulnerable",
+        "elderly",
+        "pensioner",
+        "disabled",
+        "priority",
+        "over sixty five",
+        "medical condition"
+      ],
+      "answer": "Yes, we give priority to vulnerable customers, for example people who are elderly or ill and have no heating or hot water. Please tell us when you call."
+    },
+    {
+      "id": "contact",
+      "topic": "Contact details",
+      "keywords": [
+        "phone number",
+        "telephone number",
+        "email address",
+        "e-mail",
+        "email",
+        "website",
+        "web site",
+        "contact details",
+        "how can i contact",
+        "how do i contact"
+      ],
+      "answer": "You can reach us on oh one six three two, nine six oh, oh oh oh. Our email is hello at brightwater dash plumbing dot example, and our website is w w w dot brightwater dash plumbing dot example."
+    },
+    {
+      "id": "callback_time",
+      "topic": "Callback time",
+      "keywords": [
+        "when will someone call",
+        "when will you call",
+        "when will he call",
+        "when will sam call",
+        "how long until someone calls",
+        "how long before someone calls",
+        "how quickly will someone call",
+        "what time will someone call",
+        "how long will it take for someone to call"
+      ],
+      "answer": "In office hours, someone will call you back within two hours."
+    },
+    {
+      "id": "location",
+      "topic": "Where the office is",
+      "keywords": [
+        "where are you based",
+        "where are you",
+        "your address",
+        "where is your office",
+        "visit your office",
+        "your office",
+        "trading estate",
+        "mill lane"
+      ],
+      "answer": "Our office is at Unit four, Mill Lane Trading Estate, Kelmbridge."
+    },
+    {
+      "id": "safety_gas",
+      "topic": "Gas smell: what to do",
+      "safety": "gas",
+      "keywords": [
+        "smell gas",
+        "smell of gas",
+        "smelling gas",
+        "smells of gas",
+        "gas leak",
+        "gas smell",
+        "gas emergency"
+      ],
+      "answer": "If you smell gas, open doors and windows if you can, don't use any flames or electrical switches, turn off the gas at the meter if it's safe to reach, and leave the property. Then call the National Gas Emergency number on oh eight hundred, one one one, nine nine nine. If anyone feels unwell, call nine nine nine."
+    },
+    {
+      "id": "safety_co",
+      "topic": "Carbon monoxide: what to do",
+      "safety": "co",
+      "keywords": [
+        "carbon monoxide",
+        "co alarm",
+        "co detector",
+        "carbon monoxide alarm"
+      ],
+      "answer": "If your carbon monoxide alarm sounds, or anyone has a headache, dizziness or feels sick, open doors and windows on your way out, get everyone into fresh air, and stop using the appliance. Then call the National Gas Emergency number on oh eight hundred, one one one, nine nine nine. If anyone is ill, call nine nine nine, and get medical advice even if the symptoms are mild."
+    },
+    {
+      "id": "safety_water",
+      "topic": "Water leak or flood: what to do",
+      "safety": "water",
+      "keywords": [
+        "water leak",
+        "burst pipe",
+        "pipe has burst",
+        "pipe burst",
+        "flooding",
+        "flooded",
+        "stopcock",
+        "stop cock",
+        "water everywhere",
+        "through the ceiling",
+        "leaking badly",
+        "leaking"
+      ],
+      "answer": "If water is leaking, turn it off at the stopcock if you can reach it safely. If water is near electrics, switch the electricity off at the fuse box only if you can do it without standing in water, and keep away from wet sockets and appliances."
+    }
   ]
 }

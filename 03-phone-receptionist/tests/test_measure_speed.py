@@ -125,9 +125,12 @@ def test_voice_candidates_are_free_spread_out_and_enough():
     assert choose_voice.candidate_ids(p, 1000) == [i for i in range(109) if i not in p.taken_voice_ids]
 
 
-def test_probe_form_is_valid_json_schema_for_ollama():
-    schema = ms.ProbeTurn.model_json_schema()
-    assert set(schema["properties"]) == {"heard_summary", "name", "number", "reason", "emergency"}
+def test_the_timed_llm_step_is_the_real_per_turn_form():
+    """measure_speed times turn.CallerTurn with turn.build_messages, not a look-alike: the number is what a call will see."""
+    source = (HERE.parent / "measure_speed.py").read_text(encoding="utf-8")
+    assert "structured_chat(CallerTurn, messages" in source and "build_messages(" in source and "ProbeTurn" not in source
+    schema = __import__("turn").CallerTurn.model_json_schema()
+    assert {"name", "number", "reason", "emergency", "question_topic"} <= set(schema["properties"])
     json.dumps(schema)
 
 

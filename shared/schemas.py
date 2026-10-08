@@ -38,6 +38,29 @@ class Transcript(BaseModel):
     created_at: datetime
 
 
+def normalize_uk_number(value: str | None) -> str | None:
+    """Keep digits only, then check it looks like a UK national number (0 + 9 or 10 digits).
+
+    Normalizing here (not in the prompt) means '07700 900-123' and '07700900123' are the
+    same answer. Rejecting '1632960789' (leading 0 lost, our Phase 2 'oh'->'a' problem)
+    gives the model one chance to fix it instead of us storing a wrong number.
+
+    One rule, two users: Part 1's Analysis.callback_number and Part 3's per-turn form (CallerTurn.number).
+    Returns None for None or for text without digits; raises ValueError for a number that cannot be a UK number.
+    """
+    if value is None:
+        return None
+    digits = re.sub(r"\D", "", value)
+    if not digits:
+        return None
+    if not re.fullmatch(r"0\d{9,10}", digits):
+        raise ValueError(
+            f"'{value}' is not a UK phone number: it must be 10-11 digits starting with 0. "
+            "Callers often say 'oh' for zero, which transcripts may write as 'o', 'oh' or 'a'."
+        )
+    return digits
+
+
 Category = Literal["urgent", "sales", "personal", "spam", "other"]
 
 
@@ -63,23 +86,8 @@ class Analysis(BaseModel):
     @field_validator("callback_number")
     @classmethod
     def check_uk_number(cls, value: str | None) -> str | None:
-        """Keep digits only, then check it looks like a UK national number (0 + 9 or 10 digits).
-
-        Normalizing here (not in the prompt) means '07700 900-123' and '07700900123' are the
-        same answer. Rejecting '1632960789' (leading 0 lost, our Phase 2 'oh'->'a' problem)
-        gives the model one chance to fix it instead of us storing a wrong number.
-        """
-        if value is None:
-            return None
-        digits = re.sub(r"\D", "", value)
-        if not digits:
-            return None
-        if not re.fullmatch(r"0\d{9,10}", digits):
-            raise ValueError(
-                f"'{value}' is not a UK phone number: it must be 10-11 digits starting with 0. "
-                "Callers often say 'oh' for zero, which transcripts may write as 'o', 'oh' or 'a'."
-            )
-        return digits
+        """Keep digits only, then check it looks like a UK national number (see normalize_uk_number)."""
+        return normalize_uk_number(value)
 
     @field_validator("caller_name")
     @classmethod

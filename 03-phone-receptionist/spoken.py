@@ -17,6 +17,7 @@ number into two runs), so a run is never glued together from separate statements
 """
 
 import re
+from difflib import SequenceMatcher
 
 UNITS = {"zero": "0", "oh": "0", "o": "0", "nought": "0", "naught": "0", "one": "1", "two": "2", "three": "3",
          "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"}
@@ -105,3 +106,50 @@ def letter_runs(text: str, min_len: int = 3) -> list[str]:
     if len(current) >= min_len:
         runs.append(current)
     return runs
+
+
+def similarity(a: str, b: str) -> float:
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+
+def apply_spelling(heard: str | None, letters: str) -> str:
+    """Combine the name Whisper heard with the letters the caller spelled; the spelling wins where it can be placed.
+
+        apply_spelling("Shivawn Gallagher", "SIOBHANGALLAGHER") -> "Siobhan Gallagher"
+
+    The caller may spell the whole name in one run of letters (the receptionist asks for the full name), or only a
+    part. The last word heard is taken as the surname (Whisper is usually right about it); everything before it is
+    the first name. Which part the letters are:
+      - about as long as the whole name: split them where they best match the first name and the surname heard;
+      - about as long as the surname only (or the first name only): replace just that part.
+    Letters that fit nothing are not used (the heard name is returned unchanged): better a misheard name than a
+    mangled one.
+    """
+    spelled = letters.strip().lower()
+    tokens = (heard or "").split()
+    if not spelled:
+        return heard or ""
+    if not tokens:
+        return spelled.title()
+    if len(tokens) == 1:
+        return spelled.title() if abs(len(spelled) - len(tokens[0])) <= 3 else heard
+
+    first, last = " ".join(tokens[:-1]), tokens[-1]
+    first_flat = first.replace(" ", "")
+    total = len(spelled)
+    off_full = abs(total - (len(first_flat) + len(last)))
+    off_last = abs(total - len(last))
+    off_first = abs(total - len(first_flat))
+    nearest = min(off_full, off_last, off_first)
+    if nearest > 3:
+        return heard
+    if off_full == nearest:
+        best_k, best_score = None, -1.0
+        for k in range(2, total - 1):
+            score = similarity(spelled[:k], first_flat) + similarity(spelled[k:], last) - 0.01 * abs(k - len(first_flat))
+            if score > best_score:
+                best_k, best_score = k, score
+        return f"{spelled[:best_k].title()} {spelled[best_k:].title()}"
+    if off_last == nearest:
+        return f"{first} {spelled.title()}"
+    return f"{spelled.title()} {last}"

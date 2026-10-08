@@ -10,7 +10,7 @@ short, realistic turns (the `dev` caller cards only, never the scoring cards), k
 
 The default-picking rule was written down before any measurement (README section 4):
   Whisper: the smallest model (base before small) whose name hit-rate on the dev clips is within 1 of `small`.
-  LLM: qwen2.5:7b if its median understand time is <= 3 s, otherwise qwen2.5:3b (asking before that download).
+  LLM: qwen2.5:7b if its median understand time (the real per-turn form of turn.py) is <= 3 s, otherwise qwen2.5:3b (asking before that download).
   Target: a median turn (listen + understand + speak) of 5 s or less.
 Nothing in this file produces a number without running the models: the tests only exercise the arithmetic.
 """
@@ -23,8 +23,6 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-
-from pydantic import BaseModel, Field
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -177,20 +175,6 @@ target = median turn (listen + understand + speak) of 5 s or less.
 
 # ---------------------------------------------------------------- real runs (laptop)
 
-class ProbeTurn(BaseModel):
-    """Same size and shape as the per-turn form of Phase 3, so the timing is representative of the real step."""
-    heard_summary: str = Field(description="One short sentence: what the caller just said.")
-    name: str | None = Field(description="The caller's name if they said it, else null.")
-    number: str | None = Field(description="A phone number the caller said, digits only, else null.")
-    reason: str | None = Field(description="Why they are calling, a short phrase, else null.")
-    emergency: bool = Field(description="True only for danger now: gas, flooding, sparks, no heating for a vulnerable person.")
-
-
-PROBE_SYSTEM = ("You help the receptionist of Brightwater Plumbing & Heating, a small UK plumbing business. Read what the caller "
-                "just said (speech recognition, so it may contain mistakes) and fill the form. Never guess: a detail the caller did "
-                "not say is null. A phone number is digits only; callers say 'oh' for zero. 'Emergency' means danger now. " * 2)
-
-
 def run_command(cmd: list[str]) -> str:
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=20).stdout.strip()
@@ -302,11 +286,14 @@ def main() -> int:
 
     os.environ["WHISPER_DEVICE"] = args.device
     os.environ["WHISPER_COMPUTE_TYPE"] = "float16" if args.device == "cuda" else "int8"
+    import asks
     from audio_io import listen, piper_synth, speak
     from cards import load_cards
     from choose_voice import candidate_ids
+    from faq import load_faq
     from persona import PersonaError, load_persona, speaker_id
     from shared.llm import structured_chat
+    from turn import CallerTurn, UnderstandContext, build_messages
 
     persona = load_persona()
     try:
@@ -321,9 +308,12 @@ def main() -> int:
     clips = build_clips(cards)
     out_wav = HERE / "testset" / "audio" / "speed" / "piper.wav"
 
+    topics = {e.id: e.topic for e in load_faq().values()}
+
     def llm_call(model: str, text: str) -> float:
-        messages = [{"role": "system", "content": PROBE_SYSTEM}, {"role": "user", "content": f"Caller said:\n<<<\n{text}\n>>>"}]
-        return structured_chat(ProbeTurn, messages, llm=model).seconds
+        """The REAL understanding step of Phase 3 (same prompt, same form), so the timing is what a call will see."""
+        messages = build_messages(text, UnderstandContext(asked=asks.GREETING, faq_topics=topics))
+        return structured_chat(CallerTurn, messages, llm=model, context={"faq_ids": list(topics)}).seconds
 
     outcome = run_measurements(
         args, persona, clips, sample_texts(cards),

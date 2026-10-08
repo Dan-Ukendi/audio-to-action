@@ -1714,3 +1714,64 @@ repeats fixed questions while showing what Whisper heard and the seconds per sta
 ### 9. Next phase preview
 Phase 3 builds the dialog engine (version A): the per-turn form the LLM fills, the state machine that decides what to say, the FAQ matcher
 and the call runner, tested against all 24 simulated callers.
+
+## Part 3, Phase 3: The dialog engine, version A (2026-10-08)
+
+### 1. What we built
+The brain of the receptionist, as a state machine in plain code. Each turn: the caller's words are understood (a model fills a small
+form, plain code checks every value against what was said), the call state is updated, the state machine chooses what to do, and
+every reply is built from fixed sentences (`persona.json`) and approved answers (`faq.json`). It runs headless against all 24
+simulated callers. **It has not been run with a real model**: the cloud machine has none, so every test uses the plain-code baseline.
+
+### 2. Where it fits in the pipeline
+```
+ caller text ─► UNDERSTAND (turn.py: model fills CallerTurn; ground() keeps only what was said)
+              ─► APPLY (dialog.apply_turn: slots, emergency, FAQ, yes/no)    <- shared by version A and the agent of Phase 5
+              ─► DECIDE (dialog.decide_a: state machine -> actions)          <- the part version B will replace
+              ─► RENDER (fixed sentences + FAQ answers) ─► reply
+ [Phase 3: turn.py, rules_turn.py, dialog.py, faq.py, safety.py, call.py]  <-- you are here
+```
+
+### 3. How it works, step by step
+- `turn.understand()`: builds the prompt (what was asked, what is already known, the FAQ topics), calls `shared/llm.structured_chat` for a
+  `CallerTurn`, then `ground()`: a number must appear as digits in the speech, a name must be made of words (or spelled letters) that were said,
+  a reason must share its words with the speech. If the model fails twice, `rules_turn.py` answers instead.
+- `dialog.apply_turn()`: stores a detail only when this turn contained it; an existing value changes only on an explicit correction;
+  spelled letters fix the heard name (`spoken.apply_spelling`); safety words (Part 1's patterns) or the model's flag raise the emergency.
+- `dialog.decide_a()`: GREETING/COLLECTING ask the next missing detail (reason, name, [spelling], number); READ_BACK confirms or goes to
+  CORRECTING; GOODBYE ("anything else?") ends or goes back to collecting; the turn limit and silence end the call.
+- `faq.match_questions()`: only question-shaped sentences, whole-word keywords, the longest phrase wins, a generic price question
+  looks at the sentence before it; unknown questions are passed on.
+- `call.run_call()`: a simulated caller answers whatever the dialog is waiting for, in text or through the audio loop; the call is saved as JSON.
+
+### 4. Key concepts I should understand
+- **Ground every value:** the model's answer is a claim; code checks it against the words. A number never spoken cannot be stored.
+- **Two layers for the same rule:** a model flag OR Part 1's safety words decide an emergency, so a model miss is caught by dumb reliable code.
+- **Separate "what changed" from "what to say":** `apply_turn` is shared; only `decide` differs between the state machine and the agent.
+- **Replies are never generated:** an invented price is impossible because no model writes a sentence; a test parses every reply into approved pieces.
+
+### 5. Files created or changed
+- New: `turn.py`, `rules_turn.py`, `dialog.py`, `safety.py`, `call.py`; `faq.py` (matching), `spoken.py` (`apply_spelling`), `faq.json` (a few keywords, `fallback`).
+- `shared/schemas.py`: `normalize_uk_number()` factored out of `Analysis.check_uk_number` (one rule for Part 1 and Part 3).
+- Tests: `test_turn.py`, `test_faq_match.py`, `test_dialog.py`, `test_call.py`.
+
+### 6. Try it yourself
+```powershell
+python -m pytest 03-phone-receptionist\tests -q
+python 03-phone-receptionist\call.py --card c14 --understand rules
+python 03-phone-receptionist\call.py --card dev --understand model     # needs Ollama + qwen2.5:7b
+```
+Expected: the tests pass; a transcript where Holly asks for the spelling and reads back "Siobhan Gallagher".
+
+### 7. What can go wrong
+- The prompt (`PROMPT_VERSION t1`) has never met a real model: tune it on the dev cards only, then score once.
+- The rules baseline cannot judge urgency from context (it misses c04 and c06) or paraphrase a reason; the model is expected to.
+- A caller who answers the read-back with a long unrelated story is read back again and eventually hits the turn limit.
+
+### 8. Check my understanding
+1. Why is a number the model reports thrown away if the caller did not say it?
+2. What is the difference between `apply_turn` and `decide_a`, and which one will the agent replace?
+3. Why does Holly not ask a caller who only wanted the opening hours for a name?
+
+### 9. Next phase preview
+Phase 4 hands a finished call to the Part 1 pipeline: analyze the caller's side, route it, push if urgent, and store it in `voicemails.db`.
