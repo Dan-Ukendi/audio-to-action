@@ -1799,14 +1799,14 @@ decides what happens, an urgent call is pushed (a dry run until NTFY is configur
 - `call_transcript()` builds a Part 1 `Transcript` from the caller's answers (one segment per answer; Whisper's confidence is passed on, so unclear audio is flagged by Part 1's own rule).
 - `analysis_for_call()`: robocalls, info-only and silent calls get an analysis from plain code. Others go to `analyze(..., prompt_version="call-v1")`; then `merge_model_analysis()` puts the dialog's checked name and number over the model's and keeps an urgent call urgent. If the model fails, plain code builds it and the row is flagged for review.
 - `route()` (Part 1, unchanged) decides notify / inbox / archive and the review flags; `hand_off()` adds a reason line ("phone call, outcome ..., flagged urgent in turn 1").
-- `LivePush` sends the minimal "Urgent call in progress" push the moment `run_call` flags the call; `hand_off()` does not push twice. Push first, save second (Part 1's at-least-once order).
+- `LivePush` sends the minimal "Urgent call in progress" push the moment `run_call` flags the call, in a background thread so the caller never waits; `hand_off()` waits for it and does not push twice. Push first, save second (Part 1's at-least-once order).
 - `save()` (Part 1) upserts by a hash of the call: handing the same call off again changes nothing.
 
 ### 4. Key concepts I should understand
 - **Reuse, don't copy:** routing, safety words, push text, retries and storage are Part 1's own functions; a call and a voicemail cannot disagree about what is urgent.
 - **Check the model against what was checked:** the model sees the words; the dialog verified them with the caller. For name and number the dialog wins.
 - **Push first, save second:** a crash can repeat a push (harmless) but cannot lose one (not harmless for a gas leak).
-- **Idempotency is a hash:** same call, same row, no second push.
+- **Idempotency is a hash:** same call, same row, no second push (a re-run refreshes the row but pushes only if the first run did not).
 
 ### 5. Files created or changed
 - New: `handoff.py`, `tests/test_handoff.py`. Changed: `shared/analyze.py` (a new prompt version `call-v1` and the user-message label; v2/v3 untouched), `call.py` (`CallRecord.handoff`).
@@ -1817,7 +1817,7 @@ python 03-phone-receptionist\call.py --card dev --understand rules --save
 python 03-phone-receptionist\handoff.py 03-phone-receptionist\calls\*.json --analysis rules
 python 01-voicemail-triage\store.py
 ```
-Expected: one row per call; the gas call routed `notify_now` (a dry-run push is logged), the robocall `archive`, the others `inbox`.
+Expected: one row per call; the gas call routed `notify_now` (the dry-run push text is printed), the robocall `archive`, the others `inbox`.
 
 ### 7. What can go wrong
 - `call-v1` has only been run against a fake model here. A real model may need the prompt tuned (dev calls only).

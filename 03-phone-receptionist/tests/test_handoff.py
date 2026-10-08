@@ -294,3 +294,105 @@ def test_the_record_remembers_its_hand_off_and_the_command_line_hands_saved_call
 def test_the_default_database_is_git_ignored():
     ignore = (HERE.parents[1] / ".gitignore").read_text(encoding="utf-8")
     assert "*.db" in ignore
+
+
+# ---------------------------------------------------------------- review round 1
+
+def test_a_call_that_becomes_urgent_on_a_second_hand_off_is_pushed_then():
+    """--analysis rules first, --analysis model later: the later run may find urgency the first one did not."""
+    record, first, conn, sender = call("c14", use_model=False)
+    assert first.pushed == "none" and sender.calls == []
+    again = handoff.hand_off(record, conn, analyze_fn=lambda t: model_result(category="urgent", urgency=3), sender=sender)
+    assert again.decision.route == "notify_now" and again.pushed == "end" and len(sender.calls) == 1
+    # and once it HAS been pushed, a third hand-off does not push again
+    third = handoff.hand_off(record, conn, analyze_fn=lambda t: model_result(category="urgent", urgency=3), sender=sender)
+    assert third.pushed == "already" and len(sender.calls) == 1
+
+
+def test_a_message_that_ends_in_silence_is_still_a_message():
+    record, _, conn, _ = call("c14", use_model=False)
+    record.outcome = "silence"  # the caller left a full message, then went quiet
+    seen = []
+    result = handoff.analysis_for_call(record, handoff.call_transcript(record), lambda t: seen.append(t) or model_result())
+    assert seen and result.llm_model == "qwen-test"  # the model WAS asked: there is something to judge
+    rules = handoff.rule_analysis(record)
+    assert "said nothing" not in rules.summary and "Siobhan Gallagher" in rules.summary
+    empty, _, _, _ = call("c11", use_model=False)
+    empty.outcome = "silence"
+    empty.message.update(reason=None, name=None, number=None)
+    assert "said nothing" in handoff.rule_analysis(empty).summary
+
+
+def test_an_info_only_call_keeps_every_review_flag_except_the_two_about_a_missing_name_and_number():
+    record, _, _, _ = call("f03", use_model=False)
+    record.turns[0]["heard"] = {"ignored": False, "why": None, "raw_text": "x", "min_logprob": -2.0}
+    outcome = handoff.hand_off(record, store.connect(":memory:"), use_model=False)
+    assert outcome.decision.review and any("unclear audio" in r for r in outcome.decision.reasons)
+    assert not any(r.startswith("customer call without") for r in outcome.decision.reasons)
+    # a safety word in an info-only call keeps its push AND its review flag
+    record, _, _, _ = call("f03", use_model=False)
+    record.turns[0]["caller_text"] = "The pipe has burst but what are your opening hours?"
+    outcome = handoff.hand_off(record, store.connect(":memory:"), use_model=False, sender=Sender())
+    assert outcome.decision.notify and outcome.decision.review and any("push + review" in r for r in outcome.decision.reasons)
+
+
+def test_the_call_record_survives_a_failed_end_of_call_push(tmp_path):
+    def down(title, message, priority="high", tags=""):
+        raise ValueError("push failed for a reason that is not a network error")
+
+    conn = store.connect(":memory:")
+    with pytest.raises(ValueError):
+        handoff.run_and_hand_off(CARDS["c03"], P, FAQ, UNDERSTAND, conn, sender=down, save_dir=tmp_path, use_model=False,
+                                 understand_label="rules")
+    saved = list(tmp_path.glob("c03_*.json"))
+    assert len(saved) == 1 and json.loads(saved[0].read_text(encoding="utf-8"))["handoff"] is None  # saved, not yet handed off
+    assert conn.execute("SELECT COUNT(*) FROM voicemails").fetchone()[0] == 0
+    assert handoff.main([str(saved[0]), "--db", str(tmp_path / "t.db"), "--analysis", "rules"]) == 0  # the next run completes it
+    assert store.connect(tmp_path / "t.db").execute("SELECT COUNT(*) FROM voicemails").fetchone()[0] == 1
+
+
+def test_the_command_line_expands_patterns_itself_and_survives_one_bad_file(tmp_path, capsys):
+    for prefix in ("c14", "c11"):
+        record = call_module.run_call(CARDS[prefix], P, FAQ, UNDERSTAND, understand_label="rules")
+        call_module.save_record(record, tmp_path)
+    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "half.tmp").write_text("x", encoding="utf-8")
+    db = tmp_path / "new" / "folder" / "t.db"  # a folder that does not exist yet
+    status = handoff.main([str(tmp_path / "*.json"), "--db", str(db), "--analysis", "rules"])
+    out = capsys.readouterr().out
+    assert status == 1 and "broken.json: FAILED" in out and out.count("route=") == 2
+    assert store.connect(db).execute("SELECT COUNT(*) FROM voicemails").fetchone()[0] == 2
+    with pytest.raises(SystemExit, match="no call files match"):
+        handoff.main([str(tmp_path / "nothing*.json"), "--db", str(db)])
+
+
+def test_the_live_push_never_makes_the_caller_wait():
+    import time
+    released = []
+
+    def slow(title, message, priority="high", tags=""):
+        time.sleep(0.4)
+        released.append(1)
+        return "dry_run"
+
+    live = handoff.LivePush(slow)
+    started = time.perf_counter()
+    live(None)
+    assert time.perf_counter() - started < 0.2 and live.status is None  # returned at once: the call goes on
+    live.wait()
+    assert live.status == "dry_run" and released == [1]
+
+
+def test_a_live_push_that_is_still_running_when_waited_on_counts_as_failed():
+    import threading
+    block = threading.Event()
+
+    def stuck(title, message, priority="high", tags=""):
+        block.wait(2)
+        return "sent"
+
+    live = handoff.LivePush(stuck)
+    live(None)
+    live.wait(timeout=0.05)
+    assert live.status is None and "still sending" in live.error
+    block.set()

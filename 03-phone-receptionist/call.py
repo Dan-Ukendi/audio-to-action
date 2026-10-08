@@ -17,6 +17,7 @@ margin is cut off and recorded as such: the loop itself can never run forever.
 
 import argparse
 import json
+import logging
 import sys
 import time
 import uuid
@@ -125,10 +126,10 @@ def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_
         total_s=round(time.perf_counter() - started, 3), final_state=state.model_dump(exclude={"log"}))
 
 
-def save_record(record: CallRecord, folder: Path) -> Path:
-    """calls/<id>.json, written through a temp name so a crash never leaves half a record."""
+def save_record(record: CallRecord, folder: Path, name: str | None = None) -> Path:
+    """calls/<id>.json (or `name`), written through a temp name so a crash never leaves half a record."""
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{record.call_id}.json"
+    path = folder / (name or f"{record.call_id}.json")
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(record.model_dump(), indent=2, ensure_ascii=False), encoding="utf-8")
     tmp.replace(path)
@@ -154,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--audio", action="store_true", help="speak and listen for real (Piper + Whisper): laptop only")
     parser.add_argument("--save", action="store_true", help="save each call as JSON in 03-phone-receptionist/calls/ (git-ignored)")
     args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")  # shows e.g. the dry-run push text
 
     from cards import load_cards
     from faq import load_faq

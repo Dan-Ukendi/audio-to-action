@@ -14,8 +14,9 @@ What happens, in order (the order of Part 1's deliver(): decide, push, THEN save
                           row is marked for review (attempts = 2).
   3. route()              Part 1's routing, unchanged: category -> route, Part 1's safety-word net, review flags.
   4. push                 minimal text, no caller data (Part 1's rule); a dry run unless NTFY is configured. A call flagged urgent
-                          during the call was pushed THEN (LivePush) and is not pushed again here.
-  5. save()               Part 1's store.save(): one row keyed by a hash of the call, so handing the same call off twice is a no-op.
+                          during the call was pushed THEN (LivePush, in the background) and is not pushed again here.
+  5. save()               Part 1's store.save(): one row keyed by a hash of the call. Handing the same call off again refreshes that row
+                          (it never adds a row or a second push).
 
 A call is recognisable in the table by source_file = "call-<id>.json" (Part 1's table has no source column and is not changed).
 
@@ -23,9 +24,13 @@ A call is recognisable in the table by source_file = "call-<id>.json" (Part 1's 
 """
 
 import argparse
+import glob
 import hashlib
+import json
+import logging
 import sqlite3
 import sys
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,8 +53,15 @@ from store import DEFAULT_DB, connect, save  # noqa: E402  (Part 1)
 
 SOURCE_PREFIX = "call-"
 CALL_PROMPT = "call-v1"
+# The start of every reason in Part 1's route() that sets review = True (keep in step with routing.py).
+REVIEW_REASONS = ("customer call without", "analysis needed a retry", "unclear audio", "no speech found", "safety words")
 SUMMARY_WORDS = 25            # Analysis.summary is "one sentence, max 25 words"
-NO_MODEL_OUTCOMES = {"spam", "info_only", "silence", "no_message"}  # nothing to judge: plain code is exact and instant
+
+
+def previously_notified(row) -> bool:
+    """Did the hand-off that saved this row already push (or dry-run push) for it? Judged from what it stored."""
+    reasons = " ".join(json.loads(row["reasons"]))
+    return bool(row["notified_at"]) or row["route"] == "notify_now" or "push + review" in reasons
 
 
 def is_call(source_file: str) -> bool:
@@ -81,6 +93,10 @@ def short(text: str, words: int = SUMMARY_WORDS) -> str:
     return " ".join(text.split()[:words])
 
 
+def has_message(m: dict) -> bool:
+    return bool(m["reason"] or m["name"] or m["number"] or m["extra_requests"])
+
+
 def rule_analysis(record) -> Analysis:
     """The analysis built by plain code from the dialog's own message (no model): exact, instant, never invented."""
     m = record.message
@@ -92,11 +108,12 @@ def rule_analysis(record) -> Analysis:
         category, urgency = "other", 1
     if record.outcome == "spam":
         summary = "Automated or scam call; the receptionist ended it after the first message."
-    elif record.outcome == "silence":
-        summary = "The caller said nothing; no message was left."
-    elif record.outcome == "info_only" or not (m["reason"] or m["name"] or m["number"] or m["extra_requests"]):
-        asked = ", ".join(m["faq_answered"]) or "nothing the receptionist could use"
-        summary = f"Caller only asked questions ({asked}) and left no message."
+    elif not has_message(m):  # decided by what the caller LEFT, not by how the call ended (a message can end in silence)
+        if record.outcome == "silence":
+            summary = "The caller said nothing; no message was left."
+        else:
+            asked = ", ".join(m["faq_answered"]) or "nothing the receptionist could use"
+            summary = f"Caller only asked questions ({asked}) and left no message."
     else:
         who = m["name"] or "An unnamed caller"
         about = m["reason"] or "something the receptionist could not take down"
@@ -135,7 +152,8 @@ def analysis_for_call(record, transcript: Transcript, analyze_fn=None, use_model
                       llm_model=llm, prompt_version=prompt, attempts=attempts, rejected_reply=None, rejected_because=because,
                       analyze_s=seconds, analysis=analysis, created_at=now)
 
-    if not use_model or record.outcome in NO_MODEL_OUTCOMES:
+    # Nothing to judge for a robocall or a call that left no message: plain code is exact and instant.
+    if not use_model or record.outcome == "spam" or not has_message(record.message):
         return result(rule_analysis(record), "none (rules)", "call-rules")
     try:
         model_result = (analyze_fn or default_analyze)(transcript)
@@ -155,24 +173,38 @@ def analysis_for_call(record, transcript: Transcript, analyze_fn=None, use_model
 class LivePush:
     """The push sent the moment a call is flagged urgent, while the caller is still on the line (run_call's on_urgent hook).
 
-    Minimal text, no caller data (Part 1's rule). It never raises: a push that fails must not end the call; hand_off() then
-    sends the push at the end instead. `status` is "sent" or "dry_run" (nothing is sent until NTFY is configured)."""
+    It runs in a BACKGROUND thread, one attempt: a slow ntfy server (send_push waits up to 10 s) must never make the caller hear
+    silence in an emergency. Minimal text, no caller data (Part 1's rule). It never raises: a push that fails must not end the
+    call; hand_off() then sends the push at the end, with Part 1's retries. `status` is "sent" or "dry_run" (nothing is sent until
+    NTFY is configured) once wait() has returned."""
 
     def __init__(self, sender=send_push):
         self.sender = sender
         self.status: str | None = None
         self.sent_at: str | None = None
         self.error: str | None = None
+        self._thread: threading.Thread | None = None
 
-    def __call__(self, state=None) -> None:
+    def _send(self) -> None:
         now = datetime.now(timezone.utc)
         try:
-            self.status = with_retries(self.sender, "Urgent call in progress",
-                                       f"A caller was flagged urgent at {now.astimezone():%H:%M}. Open the triage list on the laptop.",
-                                       attempts=2, base_delay=1.0, priority="urgent", tags="rotating_light")
+            self.status = self.sender("Urgent call in progress",
+                                      f"A caller was flagged urgent at {now.astimezone():%H:%M}. Open the triage list on the laptop.",
+                                      priority="urgent", tags="rotating_light")
             self.sent_at = now.isoformat(timespec="seconds") if self.status == "sent" else None
         except Exception as error:  # noqa: BLE001  (never end a call because of a push)
             self.error = f"{type(error).__name__}: {error}"
+
+    def __call__(self, state=None) -> None:
+        self._thread = threading.Thread(target=self._send, daemon=True)
+        self._thread.start()
+
+    def wait(self, timeout: float = 15.0) -> None:
+        """Wait for the background push to finish (hand-off calls this; a push still running after `timeout` counts as failed)."""
+        if self._thread is not None:
+            self._thread.join(timeout)
+            if self._thread.is_alive() and self.status is None:
+                self.error = self.error or "still sending after the call ended"
 
 
 @dataclass
@@ -192,18 +224,23 @@ def hand_off(record, conn: sqlite3.Connection, analyze_fn=None, live: LivePush |
     decision = route(transcript, result)
     if record.outcome == "info_only":
         # Part 1 flags "customer call without a number/name"; a caller who only asked the opening hours has nothing to leave.
-        decision.review = False
+        # Only those two flags go; any other reason to look (unclear audio, a retry, the safety net) still counts.
+        decision.reasons = [r for r in decision.reasons if not r.startswith("customer call without")]
+        decision.review = any(r.startswith(REVIEW_REASONS) for r in decision.reasons)
         decision.reasons.append("info-only call: the caller left no message, so the missing name and number are not a problem")
     decision.reasons.insert(1, f"phone call, outcome '{record.outcome}', {len(record.turns)} turns"
                                + (f", flagged urgent in turn {record.urgent_flagged_at_turn}" if record.urgent_flagged_at_turn else ""))
 
-    existing = conn.execute("SELECT notified_at FROM voicemails WHERE audio_sha256 = ?", (transcript.audio_sha256,)).fetchone()
+    existing = conn.execute("SELECT notified_at, route, reasons FROM voicemails WHERE audio_sha256 = ?",
+                            (transcript.audio_sha256,)).fetchone()
+    if live is not None:
+        live.wait()
     pushed, notified_at = "none", None
     if decision.notify:
         if live is not None and live.status is not None:
             pushed, notified_at = "live", live.sent_at
-        elif existing is not None:
-            pushed, notified_at = "already", existing["notified_at"]  # a row exists: the push went out when it was first saved
+        elif existing is not None and previously_notified(existing):
+            pushed, notified_at = "already", existing["notified_at"]  # the first hand-off pushed: never twice
         else:
             title, message, priority = push_text(decision, received=datetime.now().strftime("%H:%M"))
             status = with_retries(sender, title, message, priority=priority, tags="rotating_light")  # raises after the retries: not saved
@@ -224,29 +261,50 @@ def run_and_hand_off(card, persona, faq, understand_fn, conn, channel=None, anal
     live = LivePush(sender)
     record = call_module.run_call(card, persona, faq, understand_fn, channel=channel, on_urgent=live,
                                   understand_label=understand_label, prompt_version=prompt_version)
+    if save_dir:
+        call_module.save_record(record, save_dir)  # first: if the hand-off fails (ntfy down), the call is not lost and can be re-run
     outcome = hand_off(record, conn, analyze_fn, live, sender, use_model)
     if save_dir:
-        call_module.save_record(record, save_dir)
+        call_module.save_record(record, save_dir)  # again, now with the hand-off result
     return record, outcome
 
 
 # ---------------------------------------------------------------- command line
 
+def expand(patterns: list[str]) -> list[Path]:
+    """Windows shells do not expand '*.json' themselves, so do it here. Temp files from a half-written record are skipped."""
+    found: list[Path] = []
+    for pattern in patterns:
+        matches = sorted(glob.glob(pattern)) or ([pattern] if Path(pattern).exists() else [])
+        found += [Path(m) for m in matches if not m.endswith(".tmp")]
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Hand saved calls (calls/*.json) to the Part 1 pipeline.")
-    parser.add_argument("calls", nargs="+", help="call record files")
+    parser.add_argument("calls", nargs="+", help="call record files; patterns such as calls/*.json are expanded")
     parser.add_argument("--db", default=str(DEFAULT_DB), help="Part 1's SQLite database (default: 01-voicemail-triage/voicemails.db)")
     parser.add_argument("--analysis", choices=["model", "rules"], default="model",
                         help="model = Part 1's analyze() with the call prompt (needs Ollama); rules = plain code, no model")
     args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")  # shows e.g. the dry-run push text
+    paths = expand(args.calls)
+    if not paths:
+        sys.exit(f"no call files match: {' '.join(args.calls)}")
+    Path(args.db).parent.mkdir(parents=True, exist_ok=True)
     conn = connect(args.db)
-    for path in args.calls:
-        record = call_module.CallRecord.model_validate_json(Path(path).read_text(encoding="utf-8"))
-        outcome = hand_off(record, conn, use_model=args.analysis == "model", live=None)
-        call_module.save_record(record, Path(path).parent)
-        print(f"{record.call_id}: route={outcome.decision.route} notify={outcome.decision.notify} review={outcome.decision.review} "
-              f"pushed={outcome.pushed}\n    " + "\n    ".join(outcome.decision.reasons))
-    return 0
+    failed = 0
+    for path in paths:
+        try:
+            record = call_module.CallRecord.model_validate_json(path.read_text(encoding="utf-8"))
+            outcome = hand_off(record, conn, use_model=args.analysis == "model", live=None)
+            call_module.save_record(record, path.parent, name=path.name)  # the same file, now with its hand-off result
+            print(f"{path.name}: route={outcome.decision.route} notify={outcome.decision.notify} review={outcome.decision.review} "
+                  f"pushed={outcome.pushed}\n    " + "\n    ".join(outcome.decision.reasons))
+        except Exception as error:  # noqa: BLE001  (one bad file must not stop the rest; a failed push leaves no row, so re-run)
+            failed += 1
+            print(f"{path.name}: FAILED ({type(error).__name__}: {error}); nothing was saved for it, run it again")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
