@@ -39,9 +39,9 @@ def test_the_uk_number_rule_is_one_function_for_part_1_and_part_3():
     assert normalize_uk_number(None) is None and normalize_uk_number("no digits here") is None
     with pytest.raises(ValueError, match="not a UK phone number"):
         normalize_uk_number("1632960789")  # the leading 0 was lost
+    assert normalize_uk_number("0770090012") == "0770090012"  # ten digits starting with 0 is valid
     with pytest.raises(ValueError):
-        normalize_uk_number("0770090012")  # too short... 10 digits is valid, 9 is not
-        normalize_uk_number("077009001")
+        normalize_uk_number("077009001")  # nine is not
     assert Analysis.check_uk_number("01632 960 456") == "01632960456"  # Part 1 still goes through the same rule
 
 
@@ -179,5 +179,55 @@ def test_the_real_structured_chat_is_wired_to_the_form(monkeypatch):
     assert "UK phone number" in calls[1]["messages"][-1]["content"]  # the retry showed the model what was wrong
 
 
-def test_prompt_version_is_recorded_constant():
-    assert turn_module.PROMPT_VERSION == "t1"
+def test_the_prompt_version_is_part_of_what_a_saved_call_records():
+    """Saved calls name the prompt that produced them, so a changed prompt is never mistaken for the old one."""
+    import call as call_module
+    from cards import load_cards
+    record = call_module.run_call(load_cards()[0], __import__("persona").load_persona(), FAQ, lambda t, c: __import__("turn").Understanding(
+        __import__("rules_turn").rules_understand(t, c)), understand_label="model", prompt_version=turn_module.PROMPT_VERSION)
+    assert record.prompt_version == turn_module.PROMPT_VERSION and record.understand == "model"
+
+
+# ---------------------------------------------------------------- review round 1: grounding holes
+
+def test_a_name_without_letters_is_not_a_name():
+    for junk in ("12345", "-", "!!!"):
+        assert ground(form(name=junk), "hello there my friend")[0].name is None
+
+
+def test_a_slice_of_a_spelled_run_is_not_a_spelled_name():
+    spoken = "that's S, I, O, B, H, A, N"
+    assert ground(form(name="Han"), spoken)[0].name is None
+    assert ground(form(name="Siobhan"), spoken)[0].name == "Siobhan"
+    assert ground(form(name="Siobhan Gallagher"), "S, I, O, B, H, A, N, G, A, double L, A, G, H, E, R")[0].name == "Siobhan Gallagher"
+
+
+def test_every_content_word_of_a_reason_must_have_been_said():
+    text = "hello there, the boiler is making a noise"
+    assert ground(form(reason="a noisy boiler"), text)[0].reason != "a noisy boiler"  # 'noisy' was never said
+    assert ground(form(reason="a gas boiler"), "my boiler is broken")[0].reason != "a gas boiler"   # 'gas' was never said
+    assert ground(form(reason="the boiler making a noise"), text)[0].reason == "the boiler making a noise"
+    assert ground(form(reason="new tap"), "hello there")[0].reason is None   # even short reasons are checked
+    assert ground(form(reason="CO"), "hello there")[0].reason is None
+    assert ground(form(reason="a"), "hello there")[0].reason is None  # nothing but stopwords is not a reason
+
+
+def test_ground_is_idempotent():
+    once, _ = ground(form(name="Dave", reason="a leak", number="07700900123"), "Dave here, a leak, 07700 900 123")
+    twice, notes = ground(once, "Dave here, a leak, 07700 900 123")
+    assert once == twice and notes == []
+
+
+def test_an_ollama_server_error_falls_back_instead_of_ending_the_call():
+    import ollama
+
+    def runner_died(*a, **k):
+        raise ollama.ResponseError("llama runner process has terminated", 500)
+
+    u = understand("It's Dave.", ctx(asked=asks.NAME), chat=runner_died)
+    assert u.fallback and u.turn.name == "Dave"
+
+    def no_model(*a, **k):
+        raise ollama.ResponseError("model 'qwen2.5:7b' not found", 404)
+
+    assert understand("It's Dave.", ctx(asked=asks.NAME), chat=no_model).fallback

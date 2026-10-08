@@ -5,16 +5,62 @@
   "piper_speaker": null,
   "piper_speaker_note": "null until the owner picks a voice on the laptop in Phase 2 (python 03-phone-receptionist/choose_voice.py). Must not be in voice_ids_taken. The RECEPTIONIST_SPEAKER environment variable overrides this value for a single run.",
   "voice_ids_taken": {
-    "part2_meeting_voices": [7, 0, 9, 11],
-    "part1_callers": [3, 5, 11, 15, 25, 27, 33, 40, 45, 50, 55, 60, 64, 72, 80, 90],
-    "faq_callers_part3": [18, 22, 29, 38, 47, 58]
+    "part2_meeting_voices": [
+      7,
+      0,
+      9,
+      11
+    ],
+    "part1_callers": [
+      3,
+      5,
+      11,
+      15,
+      25,
+      27,
+      33,
+      40,
+      45,
+      50,
+      55,
+      60,
+      64,
+      72,
+      80,
+      90
+    ],
+    "faq_callers_part3": [
+      18,
+      22,
+      29,
+      38,
+      47,
+      58
+    ]
   },
   "whisper_hint": {
     "_about": "Proper nouns Whisper should spell right. Deliberately NO customer or caller names: the caller's name is what we score, so hinting it would inflate the result.",
-    "team": ["Sam", "Priya", "Tom", "Jamie"],
-    "places": ["Kelmbridge", "Mill Lane", "Station Road", "Wexley Green", "Harrowfield", "Thornsby Cross", "Overmere"]
+    "team": [
+      "Sam",
+      "Priya",
+      "Tom",
+      "Jamie"
+    ],
+    "places": [
+      "Kelmbridge",
+      "Mill Lane",
+      "Station Road",
+      "Wexley Green",
+      "Harrowfield",
+      "Thornsby Cross",
+      "Overmere"
+    ]
   },
-  "detail_order": ["reason", "name", "number"],
+  "detail_order": [
+    "reason",
+    "name",
+    "number"
+  ],
   "limits": {
     "max_turns": 12,
     "max_reasks_per_detail": 2,
@@ -42,6 +88,10 @@
     "goodbye_urgent": "Thank you. I've marked your message as urgent, and the team will call you back as soon as possible. If anyone is in danger, please call nine nine nine. Goodbye.",
     "goodbye_spam": "Goodbye.",
     "silence_end": "I can't hear you, so I'll end the call now. Please call back when you're ready. Goodbye.",
-    "turn_limit": "I'm sorry, we've run out of time on this call, so I'll pass on what I have. Goodbye."
+    "turn_limit": "I'm sorry, we've run out of time on this call, so I'll pass on what I have. Goodbye.",
+    "what_else": "Of course. What else can I help you with?",
+    "goodbye_info": "Thank you for calling Brightwater Plumbing and Heating. Goodbye.",
+    "turn_limit_urgent": "I'm sorry, we've run out of time on this call, so I'll pass on what I have. I've marked it as urgent, and the team will call you back as soon as possible. If anyone is in danger, please call nine nine nine. Goodbye.",
+    "silence_end_urgent": "I can't hear you, so I'll end the call now. I've marked your call as urgent, and the team will call you back as soon as possible. If anyone is in danger, please call nine nine nine. Goodbye."
   }
 }

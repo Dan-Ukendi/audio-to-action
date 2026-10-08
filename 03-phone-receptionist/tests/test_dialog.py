@@ -30,8 +30,21 @@ def form(**changes) -> CallerTurn:
     return CallerTurn.model_validate({**base, **changes}, context={"faq_ids": list(FAQ)})
 
 
+def compose(fields) -> str:
+    """Words that really contain the values: grounding runs inside apply_turn, so a value the text lacks would be dropped."""
+    parts = []
+    if fields.get("reason"):
+        parts.append(f"It's about {fields['reason'].rstrip('.')}.")
+    if fields.get("name"):
+        parts.append(f"My name is {fields['name']}.")
+    if fields.get("number"):
+        parts.append(f"My number is {fields['number']}.")
+    return " ".join(parts) or "Um, well."
+
+
 def say(state, text, **fields):
-    """One caller turn whose understanding is exactly `fields` (what a perfect model would report)."""
+    """One caller turn whose understanding is exactly `fields` (what a perfect model would report). Text 'x' = compose it."""
+    text = compose(fields) if text == "x" else text
     return next_reply(state, text, P, FAQ, lambda t, c: Understanding(form(**fields)))
 
 
@@ -71,10 +84,10 @@ def test_details_are_asked_one_at_a_time_in_the_order_reason_name_number():
 
 def test_what_the_caller_volunteers_is_not_asked_again():
     s = new()
-    reply, s = say(s, "Hi, Dave here, my number is ..., about a leak", reason="a leak", name="Dave", number=NUMBER)
+    reply, s = say(s, "x", reason="a leak", name="Dave", number=NUMBER)
     assert reply == read_back("Dave", NUMBER, "a leak")  # nothing missing: straight to the read-back
     s2 = new()
-    reply, s2 = say(s2, "Dave, about a leak", reason="a leak", name="Dave")
+    reply, s2 = say(s2, "x", reason="a leak", name="Dave")
     assert reply == line("ask_number")  # only the number is missing
 
 
@@ -285,7 +298,7 @@ def test_a_gas_smell_gets_the_acknowledgement_and_the_gas_advice_once_then_colle
 
 def test_the_emergency_goodbye_promises_a_callback_and_mentions_999():
     s = new()
-    _, s = say(s, "gas", reason="gas", emergency=True, name="Priya", number=NUMBER)
+    _, s = say(s, "x", reason="a gas smell", emergency=True, name="Priya", number=NUMBER)
     _, s = say(s, "Yes")
     reply, s = say(s, "No thanks", wants_to_end=True)
     assert reply == line("goodbye_urgent") and "nine nine nine" in reply and s.state == "ENDED"
@@ -385,7 +398,7 @@ def test_a_question_is_answered_word_for_word_and_collection_goes_on():
 
 def test_an_unknown_question_is_passed_on_and_kept_in_the_message():
     s = new()
-    reply, s = say(s, "Do you fit solar panels?")
+    reply, s = say(s, "Do you fit solar panels?", question_topic="other")
     assert reply == f"{line('faq_unknown')} {line('ask_reason')}"
     assert s.unanswered_questions == ["Do you fit solar panels?"]
     assert dialog.message_of(s)["unanswered_questions"] == ["Do you fit solar panels?"]
@@ -396,7 +409,7 @@ def test_someone_who_only_asks_a_question_is_not_pressed_for_a_message():
     reply, s = say(s, "What are your opening hours?")
     assert reply == f"{FAQ['hours'].answer} {line('anything_else')}" and s.state == "GOODBYE"
     reply, s = say(s, "No thanks, that's all.", wants_to_end=True)
-    assert reply == line("goodbye") and s.outcome == "info_only" and all(v.value is None for v in s.slots.values())
+    assert reply == line("goodbye_info") and s.outcome == "info_only" and all(v.value is None for v in s.slots.values())
 
 
 def test_a_new_request_after_anything_else_goes_back_to_taking_a_message():
@@ -409,7 +422,7 @@ def test_a_new_request_after_anything_else_goes_back_to_taking_a_message():
 def test_a_second_question_in_the_closing_phase_is_answered_too():
     s = new()
     _, s = say(s, "Do you cover Overmere?")
-    reply, s = say(s, "Can I pay by card?")
+    reply, s = say(s, "What payment methods do you take?")
     assert reply == f"{FAQ['payment'].answer} {line('anything_else')}"
 
 
@@ -428,7 +441,7 @@ def test_the_model_can_pick_the_entry_when_no_keyword_matches():
 
 def test_two_answers_in_one_reply_when_two_questions_are_asked():
     s = new()
-    reply, s = say(s, "Do you cover Overmere, and can I pay by card?")
+    reply, s = say(s, "Do you cover Overmere, and what payment methods do you take?")
     assert FAQ["area"].answer in reply and FAQ["payment"].answer in reply
 
 
@@ -492,3 +505,363 @@ def test_every_reply_is_made_only_of_persona_lines_and_faq_answers():
         record = run_call(card, P, FAQ, lambda t, c: Understanding(rules_understand(t, c)), understand_label="rules")
         for entry in record.turns:
             assert pattern.fullmatch(entry["reply"]), (card.id, entry["reply"])
+
+
+# ---------------------------------------------------------------- review round 1: the holes found by probing
+
+def test_apply_turn_grounds_again_so_a_custom_understanding_step_cannot_store_inventions():
+    """Grounding is inside apply_turn, not only inside turn.understand(): any understand_fn is safe."""
+    s = new()
+    reply, s = next_reply(s, "hello", P, FAQ, lambda t, c: Understanding(form(name="Invented Person", number="07700900999", reason="invented reason")))
+    assert {k: v.value for k, v in s.slots.items()} == {"reason": None, "name": None, "number": None}
+    assert reply == line("ask_reason") and any("not in what was said" in n for n in s.log[0]["understanding"]["notes"])
+
+
+def test_a_correction_changes_only_the_field_it_names():
+    s = read_back_state()
+    # the (fake) model also fills a "reason" from the words "number is wrong": it must not overwrite the real reason
+    reply, s = say(s, "No, the number is wrong, it's 01632 960 124", number="01632960124", reason="number is wrong",
+                   is_correction=True, correction_field="number")
+    assert s.value("number") == "01632960124" and s.value("reason") == "a leak" and s.value("name") == "Dave"
+    reply, s = say(s, "No, my name is David", name="David", is_correction=True, correction_field="name", reason="my name")
+    assert s.value("name") == "David" and s.value("reason") == "a leak"
+
+
+def test_a_correction_without_a_named_field_changes_what_was_given_not_the_reason():
+    s = read_back_state()
+    _, s = say(s, "No, it's 01632 960 124, sorry about that", number="01632960124", reason="sorry about that", is_correction=True)
+    assert s.value("number") == "01632960124" and s.value("reason") == "a leak"
+
+
+def test_a_partial_number_correction_replaces_the_end_of_the_number():
+    """The plan's own example: 'No, it's 349'. Every digit of the result was said (stored number + this turn)."""
+    for phrase in ("No, it's 349", "No, it ends in three four nine", "No, the end is 349, not 501", "No, the last three digits are 349"):
+        s = read_back_state(number="01632960501")
+        reply, s = say(s, phrase, is_correction=True, correction_field="number")
+        assert s.value("number") == "01632960349", phrase
+        assert reply == read_back("Dave", "01632960349", "a leak"), phrase
+
+
+def test_a_partial_correction_that_would_make_no_valid_number_is_not_applied():
+    s = read_back_state()
+    reply, s = say(s, "No, it's 3", is_correction=True, correction_field="number")
+    assert s.value("number") == NUMBER  # unchanged: nothing was invented
+
+
+def test_an_emergency_is_not_hung_up_on_as_spam():
+    for model_says_automated in (False, True):
+        s = new()
+        reply, s = say(s, "I got a final notice from my landlord and now there's a smell of gas in the kitchen",
+                       is_automated=model_says_automated, reason="a smell of gas")
+        assert s.urgent and not s.spam and s.state != "ENDED" and FAQ["safety_gas"].answer in reply, model_says_automated
+
+
+def test_a_robocall_that_says_urgent_is_still_spam_without_safety_words():
+    s = new()
+    reply, s = say(s, "Urgent. Your listing will be suspended. Press one now.", is_automated=False, emergency=True)
+    assert s.spam and reply == line("goodbye_spam") and not s.urgent
+
+
+def test_a_closing_remark_inside_a_request_does_not_hang_up():
+    s = new()
+    reply, s = say(s, "My tap is dripping, that's it really, can someone ring me?", reason="a dripping tap", wants_to_end=True)
+    assert s.state == "COLLECTING" and reply == line("ask_name") and s.value("reason") == "a dripping tap"
+
+
+def test_an_urgent_caller_who_also_says_goodbye_is_still_asked_for_name_and_number():
+    s = new()
+    reply, s = say(s, "My mum is eighty and has no heating, that's it really", reason="no heating", wants_to_end=True)
+    assert s.urgent and s.state == "COLLECTING" and reply.endswith(line("ask_name"))
+
+
+def test_a_bare_goodbye_ends_the_call_but_an_urgent_one_is_asked_for_a_number_first():
+    s = new()
+    reply, s = say(s, "Bye.", wants_to_end=True)
+    assert reply == line("goodbye_info") and s.state == "ENDED"
+    s = new()
+    _, s = say(s, "x", reason="no heating", name="Dave", emergency=True)
+    assert s.waiting_for == asks.NUMBER
+    reply, s = say(s, "Bye.", wants_to_end=True)
+    assert s.state != "ENDED" and reply == line("ask_number")
+
+
+def test_a_second_request_after_anything_else_is_added_not_lost():
+    s = read_back_state(reason="a radiator problem")
+    _, s = say(s, "Yes, that's right")
+    reply, s = say(s, "Yes, also my outside tap is dripping and needs looking at.", reason="my outside tap is dripping")
+    assert s.extra_requests == ["my outside tap is dripping"] and s.value("reason") == "a radiator problem"
+    assert reply == f"{line('confirmed')} {line('anything_else')}" and s.state == "GOODBYE"
+    assert dialog.message_of(s)["extra_requests"] == ["my outside tap is dripping"]
+    reply, s = say(s, "No, that's all.")
+    assert s.state == "ENDED" and s.outcome == "completed"
+
+
+def test_an_emergency_that_comes_up_after_the_message_is_flagged_and_added():
+    s = read_back_state(reason="a radiator problem")
+    _, s = say(s, "Yes, that's right")
+    reply, s = say(s, "Actually, I can smell gas now", reason="a smell of gas", emergency=True)
+    assert s.urgent and reply.startswith(line("urgent_ack")) and FAQ["safety_gas"].answer in reply
+    assert s.extra_requests == ["a smell of gas"] and s.value("reason") == "a radiator problem"
+
+
+def test_a_plain_yes_to_anything_else_asks_what_else_and_does_not_count_as_unclear():
+    s = read_back_state()
+    _, s = say(s, "Yes")
+    reply, s = say(s, "Yes")
+    assert reply == line("what_else") and s.unclear_closings == 0 and s.state == "GOODBYE"
+    reply, s = say(s, "Yes, there is. Also my tap drips.", reason="my tap drips")
+    assert s.extra_requests == ["my tap drips"] and s.state == "GOODBYE"
+
+
+def test_a_question_about_the_danger_is_answered_by_the_advice_but_other_questions_are_passed_on():
+    s = new()
+    _, s = say(s, "There's a smell of gas. Should I turn it off?", reason="a smell of gas", emergency=True, question_topic="other")
+    assert s.unanswered_questions == []  # the advice answers "what do I do?"
+    s = new()
+    _, s = say(s, "There's a smell of gas. Do you fit solar panels?", reason="a smell of gas", emergency=True, question_topic="other")
+    assert s.unanswered_questions == ["Do you fit solar panels?"]  # not about the danger: still passed on in the message
+    _, s = say(s, "x", name="Priya", number=NUMBER)
+    _, s = say(s, "Yes")
+    _, s = say(s, "One more thing: do you fit solar panels?", question_topic="other")
+    assert s.unanswered_questions == ["Do you fit solar panels?", "One more thing: do you fit solar panels?"]
+
+
+def test_asking_to_repeat_says_the_question_again_and_records_nothing():
+    s = new()
+    _, s = say(s, "x", reason="a leak")
+    assert s.waiting_for == asks.NAME
+    reply, s = say(s, "Could you repeat that?")
+    assert reply == line("ask_name") and s.waiting_for == asks.NAME and s.unanswered_questions == [] and s.slots["name"].asks == 1
+    s = read_back_state()
+    reply, s = say(s, "Sorry, could you say that again?")
+    assert reply == read_back("Dave", NUMBER, "a leak") and s.state == "READ_BACK" and s.unclear_readbacks == 0
+
+
+def test_small_talk_and_questions_about_the_call_are_not_passed_on():
+    for text in ("Can I leave a message for Sam?", "Is that Brightwater?", "Who am I speaking to?", "Are you a real person?",
+                 "What's your name?", "Hello?"):
+        s = new()
+        _, s = say(s, text, question_topic="other")
+        assert s.unanswered_questions == [], text
+
+
+def test_a_model_that_sees_no_question_vetoes_the_keyword_guess_of_an_unknown_one():
+    s = new()
+    _, s = say(s, "Do you know where my parcel is?", question_topic=None)
+    assert s.unanswered_questions == []
+    s = new()
+    _, s = say(s, "Do you know where my parcel is?", question_topic="other")
+    assert s.unanswered_questions == ["Do you know where my parcel is?"]
+
+
+def test_an_urgent_call_never_ends_without_the_urgent_promise():
+    # turn limit
+    s = new()
+    _, s = say(s, "There's a smell of gas", reason="a smell of gas", emergency=True)
+    s.turns = P.max_turns - 1  # the last turn the call may have
+    reply, s = say(s, "blah blah")
+    assert reply == line("turn_limit_urgent") and "nine nine nine" in reply and s.outcome == "turn_limit"
+    # silence
+    s = new()
+    _, s = say(s, "There's a smell of gas", reason="a smell of gas", emergency=True)
+    _, s = say(s, "")
+    reply, s = say(s, "")
+    assert reply == line("silence_end_urgent") and "nine nine nine" in reply and s.outcome == "silence"
+
+
+def test_silence_after_a_confirmed_message_is_still_a_completed_call():
+    s = read_back_state()
+    _, s = say(s, "Yes")
+    _, s = say(s, "")
+    reply, s = say(s, "")
+    assert s.state == "ENDED" and s.outcome == "completed"
+
+
+def test_a_caller_who_leaves_at_the_read_back_gets_a_goodbye_and_the_message_stays_unconfirmed():
+    s = read_back_state()
+    reply, s = say(s, "Bye.", wants_to_end=True)
+    assert reply == line("goodbye") and s.state == "ENDED" and s.outcome == "caller_ended"
+
+
+def test_the_read_back_is_repeated_at_most_max_reasks_times_when_not_understood():
+    s = read_back_state()
+    replies = []
+    for _ in range(4):
+        reply, s = say(s, "Hmm, I don't know")
+        replies.append(reply)
+        if s.state == "ENDED":
+            break
+    assert all(r == read_back("Dave", NUMBER, "a leak") for r in replies[:P.max_reasks])
+    assert s.state == "ENDED" and replies[-1] == line("goodbye")
+
+
+def test_spelling_is_not_asked_on_an_urgent_call():
+    s = new()
+    _, s = say(s, "x", reason="a smell of gas", name="Priya Shah", emergency=True)
+    assert s.waiting_for == asks.NUMBER and not s.spelling_asked
+
+
+def test_info_only_calls_end_with_the_plain_goodbye_not_the_message_goodbye():
+    s = new()
+    _, s = say(s, "What are your opening hours?")
+    reply, s = say(s, "No thanks", wants_to_end=True)
+    assert reply == line("goodbye_info") and "passed your message" not in reply
+
+
+# ---------------------------------------------------------------- review round 2
+
+def rules_say(state, text):
+    """One caller turn understood by the rules baseline (the model-free path)."""
+    from rules_turn import rules_understand
+    return next_reply(state, text, P, FAQ, lambda t, c: Understanding(rules_understand(t, c)))
+
+
+def test_questions_and_fillers_are_never_stored_as_the_name_and_do_not_block_the_real_one():
+    for junk in ("Pardon?", "Hmm", "Could you repeat that?", "Is that Brightwater?", "Who am I speaking to?", "Do you do underfloor heating?"):
+        s = new()
+        _, s = rules_say(s, "My boiler is broken.")
+        assert s.waiting_for == asks.NAME
+        _, s = rules_say(s, junk)
+        assert s.value("name") is None, junk
+        _, s = rules_say(s, "Ann Lee")
+        assert s.value("name") == "Ann Lee", junk
+
+
+def test_spelled_letters_alone_become_the_name_when_none_was_heard():
+    for spoken, expected in (("S, M, I, T, H", "Smith"), ("S M I T H", "Smith")):
+        s = new()
+        _, s = rules_say(s, "My boiler is broken.")
+        _, s = rules_say(s, spoken)
+        assert s.value("name") == expected, spoken
+
+
+def test_a_repeat_request_stores_nothing_even_from_a_model_that_fills_the_form():
+    s = new()
+    _, s = say(s, "x", reason="a leak")
+    reply, s = say(s, "Could you repeat that?", name="Could you repeat")
+    assert s.value("name") is None and reply == line("ask_name")
+
+
+def test_naming_the_wrong_field_asks_for_it_directly_with_the_rules_path():
+    for answer, ask_line, field in (("Number.", "ask_number", "number"), ("Your number.", "ask_number", "number"),
+                                    ("The name.", "ask_name", "name"), ("What it's about.", "ask_reason", "reason")):
+        s = read_back_state()
+        _, s = rules_say(s, "No.")
+        assert s.state == "CORRECTING"
+        reply, s = rules_say(s, answer)
+        assert reply == line(ask_line) and s.value("name") == "Dave", answer
+        assert s.state == "CORRECTING" and s.waiting_for == {"number": asks.NUMBER, "name": asks.NAME, "reason": asks.REASON}[field]
+
+
+def test_naming_the_wrong_field_works_straight_from_the_read_back_and_with_a_model_form():
+    s = read_back_state()
+    reply, s = say(s, "No, the number is wrong", is_correction=True, correction_field="number")
+    assert reply == line("ask_number") and s.state == "CORRECTING"
+    reply, s = say(s, "01632 960 124", number="01632960124")
+    assert s.value("number") == "01632960124" and reply == read_back("Dave", "01632960124", "a leak") and s.state == "READ_BACK"
+    s = read_back_state()
+    reply, s = say(s, "No, the name is wrong")  # no field set by the model: the words decide
+    assert reply == line("ask_name")
+    reply, s = say(s, "David", name="David")
+    assert s.value("name") == "David" and s.value("number") == NUMBER
+
+
+def test_the_answer_to_an_asked_detail_changes_only_that_detail():
+    s = read_back_state()
+    _, s = say(s, "No, the number is wrong", is_correction=True, correction_field="number")
+    _, s = say(s, "01632 960 124 and it's about a boiler", number="01632960124", reason="a boiler", name="David")
+    assert s.value("number") == "01632960124" and s.value("name") == "Dave" and s.value("reason") == "a leak"
+
+
+def test_a_number_is_not_repaired_by_digits_that_are_not_about_its_end():
+    for phrase in ("No, I live at 42 Mill Lane, the number is fine but the name is wrong", "No the number is fine, it's flat 12",
+                   "Wrong number, call me after 5 30 instead", "No, the number starts with 01632", "No, it's at number 349 Station Road"):
+        s = read_back_state(number="07700900123")
+        _, s = rules_say(s, phrase)
+        assert s.value("number") == "07700900123", phrase
+
+
+def test_the_plans_example_works_on_the_rules_path_without_any_field_hint():
+    for phrase in ("No, it's 349", "No, it ends in three four nine", "No, the end is 349, not 123"):
+        s = read_back_state(number="07700900123")
+        reply, s = rules_say(s, phrase)
+        assert s.value("number") == "07700900349", phrase
+
+
+def test_a_yes_followed_by_a_no_is_a_no():
+    for phrase in ("Yeah no, that's wrong.", "Right, no, the name's wrong.", "Yes, no, not quite."):
+        s = read_back_state()
+        _, s = rules_say(s, phrase)
+        assert s.state == "CORRECTING" and not any(slot.confirmed for slot in s.slots.values()), phrase
+    s = read_back_state()
+    _, s = rules_say(s, "Yes, that's right, there's no rush.")  # "no rush" is not a no
+    assert s.state == "GOODBYE" and all(slot.confirmed for slot in s.slots.values() if slot.value)
+
+
+def test_a_caller_who_keeps_saying_no_is_not_read_back_to_for_ever():
+    s = read_back_state()
+    for _ in range(14):
+        reply, s = say(s, "No.")
+        if s.state == "ENDED":
+            break
+    assert s.state == "ENDED" and reply == line("goodbye") and s.outcome == "caller_ended"
+    assert s.read_backs <= 1 + P.max_reasks and s.turns < P.max_turns
+
+
+def test_a_correction_after_anything_else_is_not_lost():
+    s = read_back_state()
+    _, s = say(s, "Yes")
+    reply, s = say(s, "Oh and my number is actually 07700 900222", number="07700900222")
+    assert s.value("number") == "07700900222" and s.state == "READ_BACK"
+    assert reply == read_back("Dave", "07700900222", "a leak") and not any(sl.confirmed for sl in s.slots.values())
+    _, s = say(s, "Yes")
+    assert s.state == "GOODBYE" and s.value("number") == "07700900222"
+
+
+def test_the_same_late_correction_works_on_the_rules_path_and_a_late_name_is_read_back():
+    s = read_back_state()
+    _, s = rules_say(s, "Yes")
+    reply, s = rules_say(s, "Actually my number is 07700 900 222")
+    assert s.value("number") == "07700900222" and s.state == "READ_BACK"
+    s = new()
+    s.slots["name"].given_up = True
+    _, s = say(s, "x", reason="a leak", number=NUMBER)
+    _, s = say(s, "Yes")
+    reply, s = say(s, "My name is Dave", name="Dave")
+    assert s.value("name") == "Dave" and s.state == "READ_BACK"  # a name given late is stored AND read back
+
+
+def test_a_real_question_with_is_that_or_is_this_is_not_small_talk():
+    s = new()
+    _, s = say(s, "My boiler is making a banging noise. Is that dangerous?", reason="a banging boiler", question_topic="other")
+    assert s.unanswered_questions == ["Is that dangerous?"]
+    s = new()
+    _, s = say(s, "Is this something you can do?", question_topic="other")
+    assert s.unanswered_questions == ["Is this something you can do?"]
+
+
+def test_come_and_look_is_a_request_not_a_question():
+    s = new()
+    _, s = say(s, "Can someone come and look at it?", question_topic="other")
+    assert s.unanswered_questions == []
+
+
+def test_after_a_repeat_the_caller_is_asked_to_answer_the_same_question_as_before():
+    s = new()
+    _, s = say(s, "x", reason="a leak")
+    _, s = say(s, "")
+    assert s.asking == asks.REPEAT
+    reply, s = say(s, "Pardon?")
+    assert reply == line("ask_name") and s.asking == s.waiting_for == asks.NAME
+
+
+def test_a_repeated_plain_yes_to_what_else_does_not_loop_to_the_turn_limit():
+    s = read_back_state()
+    _, s = say(s, "Yes")
+    replies = []
+    for _ in range(8):
+        reply, s = say(s, "Yes")
+        replies.append(reply)
+        if s.state == "ENDED":
+            break
+    assert replies[0] == line("what_else") and s.state == "ENDED" and s.turns <= 6 and s.outcome == "completed"

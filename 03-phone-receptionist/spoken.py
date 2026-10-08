@@ -78,6 +78,14 @@ def digit_runs(text: str, min_len: int = 1) -> list[str]:
     return [r for r in runs if len(r) >= min_len]
 
 
+NUMBER_VOCABULARY = set(UNITS) | set(TEENS) | set(TENS) | set(REPEATERS) | {"hundred", "and"}
+
+
+def non_number_words(text: str) -> list[str]:
+    """The words of a sentence that are not part of a number: 'No, it's 349' -> ['no', "it's"]."""
+    return [w for w in re.findall(r"[a-z']+", text.lower()) if w not in NUMBER_VOCABULARY]
+
+
 def letter_runs(text: str, min_len: int = 3) -> list[str]:
     """Names spelled letter by letter: 'S, I, O, B, H, A, N' -> 'SIOBHAN'; 'G, A, double L, A' -> 'GALLA'.
 

@@ -73,7 +73,7 @@ QUESTION_WORDS = re.compile(
     r"any chance)\b")
 REQUEST_WORDS = re.compile(
     r"\b(give me a (call|ring)|call me|ring me|phone me|text me|get back to me|call back|ring back|call him|call her|"
-    r"come out|come round|send (someone|a|an)|book (me|us|in)|arrange|let (him|her|sam) know|tell (him|her|sam)|"
+    r"come out|come round|come and (look|see|take)|look at (it|that)|send (someone|a|an)|book (me|us|in)|arrange|let (him|her|sam) know|tell (him|her|sam)|"
     r"pass (it|that|this) on|ask (him|her|sam))\b")
 
 
@@ -93,7 +93,18 @@ def looks_like_question(sentence: str) -> bool:
     return "?" in sentence or bool(QUESTION_WORDS.search(normalize_text(sentence)))
 
 
-CONVERSATIONAL = re.compile(r"^(hello|hi|hey|pardon|sorry|what|really|are you there|can you hear me|is (anyone|anybody|someone) there|hello are you there)\b")
+# Not questions about the business: small talk, the line, the call itself, the receptionist.
+CONVERSATIONAL = re.compile(
+    r"^(hello|hi|hey|pardon|sorry|what|really|are you there|can you hear me|is (anyone|anybody|someone) there|hello are you there|"
+    r"could you (repeat|say that again)|can you (repeat|say that again)|can i (leave|speak|talk|have a word)|may i (speak|leave)|"
+    r"can you take|could you take|who am i|who is this|who are you|are you (a )?(real|robot|human|machine|person|automated|recording)|"
+    r"whats your name|what is your name|what are you called|is (that|this) (brightwater|right|correct|the (right|brightwater|plumber|company|business|office)|them)|can you add|could you add|can you hear|you there)\b")
+
+
+def is_small_talk(sentence: str) -> bool:
+    """'Hello?', 'Pardon?', 'Could you repeat that?', 'Is that Brightwater?': about the call, not the business."""
+    plain = re.sub(r"^((hello|hi|hey|oh|um|yes|yeah|sorry)\s+)+", "", normalize_text(sentence))
+    return bool(CONVERSATIONAL.match(plain)) or len(plain.split()) < 3
 
 
 def is_information_question(sentence: str) -> bool:
@@ -116,10 +127,20 @@ def is_request(sentence: str) -> bool:
     return bool(REQUEST_WORDS.search(normalize_text(sentence)))
 
 
+def light_stem(word: str) -> str:
+    """'bathrooms' -> 'bathroom', 'callouts' -> 'callout'. Applied to the caller's words AND the keywords, so a plural
+    question finds a singular keyword (and the other way round). Words of three letters or fewer ('gas', 'bus') are left alone."""
+    return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+
+
+def match_form(text: str) -> str:
+    return " ".join(light_stem(w) for w in normalize_text(text).split())
+
+
 def keyword_matches(text: str, entries: dict[str, FaqEntry]) -> list[tuple[str, str]]:
     """(entry id, keyword) for every keyword found as whole words, minus keywords inside a longer matched keyword."""
-    padded = f" {normalize_text(text)} "
-    found = [(e.id, normalize_text(k)) for e in entries.values() for k in e.keywords if f" {normalize_text(k)} " in padded]
+    padded = f" {match_form(text)} "
+    found = [(e.id, match_form(k)) for e in entries.values() for k in e.keywords if f" {match_form(k)} " in padded]
     return [(eid, k) for eid, k in found
             if not any(k != other and f" {k} " in f" {other} " for _, other in found)]
 
@@ -166,7 +187,7 @@ def match_questions(text: str, entries: dict[str, FaqEntry], llm_topic: str | No
         chosen = best(specific)
     elif found:  # only generic hits ("how much ..."): a question that points back is about the sentence before it
         context = {e: sc for i in asked if i > 0 and POINTS_BACK.search(normalize_text(parts[i]))
-                   for e, sc in scores(parts[i - 1], entries).items() if not entries[e].fallback}
+                   for e, sc in scores(parts[i - 1], entries).items() if not entries[e].fallback and not entries[e].safety}
         chosen = best(context) if context else best(found)
     else:
         chosen = []

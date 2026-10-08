@@ -36,7 +36,7 @@ def test_the_question_can_be_a_sentence_among_statements():
 
 
 def test_whole_words_only():
-    assert ids("Is Overmeres a nice place?") == []  # 'overmere' inside another word is not a match
+    assert ids("Is Overmerex a nice place?") == []  # 'overmere' inside another word is not a match
     assert ids("What about the thours?") == []
 
 
@@ -55,7 +55,7 @@ def test_a_self_contained_price_question_is_just_answered():
 
 
 def test_two_questions_in_one_turn_give_two_answers_best_first():
-    assert set(ids("Do you cover Overmere, and can I pay by card?")) == {"area", "payment"}
+    assert set(ids("Do you cover Overmere, and what payment methods do you take?")) == {"area", "payment"}
     assert len(ids("What are your hours, do you cover Overmere, can I pay by card and are you insured?")) <= F.MAX_ANSWERS
 
 
@@ -109,3 +109,20 @@ def test_scoring_helpers():
     assert F.normalize_text("It's 24/7, isn't it?") == "its 24 7 isnt it"
     assert F.looks_like_question("Do you cover Kelmbridge") and not F.looks_like_question("I need a boiler.")
     assert F.sentences("One. Two? Three!") == ["One.", "Two?", "Three!"]
+
+
+def test_plurals_find_singular_keywords_and_the_other_way_round():
+    assert ids("Do you do bathrooms?") == ["bathrooms"] and ids("Do you do emergency callouts?") == ["emergency_callout"]
+    assert ids("What are your opening hour?") == ["hours"]
+
+
+def test_a_leak_does_not_turn_a_price_question_into_safety_advice():
+    r = F.match_questions("My tap is leaking. How much would that cost?", E)
+    assert [e.id for e in r.entries] == ["prices"] and not any(e.safety for e in r.entries)
+
+
+def test_questions_about_the_call_itself_are_not_unknown_questions():
+    for text in ("Could you repeat that?", "Sorry, could you say that again?", "Can I leave a message for Sam?", "Can you take a message?",
+                 "Is that Brightwater?", "Who am I speaking to?", "Are you a real person?", "What's your name?", "Is that right?"):
+        r = F.match_questions(text, E)
+        assert r.unknown is None and r.entries == [], text

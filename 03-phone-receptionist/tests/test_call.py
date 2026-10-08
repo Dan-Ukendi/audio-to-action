@@ -66,25 +66,41 @@ def test_no_name_is_ever_invented(records):
             assert all(part in words or any(part in s for s in spelled) for part in re.findall(r"[a-z']+", name.lower())), (prefix, name)
 
 
-def test_robocalls_get_a_short_goodbye_and_are_not_urgent(records):
-    for prefix in ("c11", "c12"):
-        r = records[prefix]
-        assert r.outcome == "spam" and len(r.turns) == 1 and not r.message["urgent"]
-        assert r.turns[0]["reply"] == P.say("goodbye_spam")
+def test_dev_card_c11_the_robocall_gets_a_short_goodbye_and_is_not_urgent(records):
+    r = records["c11"]
+    assert r.outcome == "spam" and len(r.turns) == 1 and not r.message["urgent"] and r.turns[0]["reply"] == P.say("goodbye_spam")
 
 
-def test_callers_with_safety_words_are_flagged_during_the_call_with_the_right_advice(records):
-    for prefix, kind in (("c01", "water"), ("c03", "gas"), ("c05", "water")):
-        r = records[prefix]
-        assert r.urgent_flagged_at_turn == 1 and r.message["urgent"], prefix
-        assert kind in r.message["safety_advised"], prefix
-        assert FAQ[f"safety_{kind}"].answer in r.turns[0]["reply"]
-    assert records["c02"].urgent_flagged_at_turn == 1  # "no heating and no hot water" is one of Part 1's safety phrases
+def test_every_spam_ending_is_one_short_turn_and_never_urgent(records):
+    for prefix, r in records.items():
+        if r.outcome == "spam":
+            assert len(r.turns) == 1 and not r.message["urgent"] and r.turns[0]["reply"] == P.say("goodbye_spam"), prefix
 
 
-def test_calls_that_are_not_emergencies_are_not_flagged_by_the_baseline(records):
-    for prefix in ("c07", "c08", "c09", "c10", "c13", "c14", "c15", "c17", "c18", "f01", "f02", "f03", "f04", "f05", "f06"):
-        assert not records[prefix].message["urgent"], prefix
+def test_dev_card_c03_the_gas_caller_is_flagged_in_the_first_turn_and_gets_the_gas_advice(records):
+    r = records["c03"]
+    assert r.urgent_flagged_at_turn == 1 and r.message["urgent"] and r.message["safety_advised"] == ["gas"]
+    assert FAQ["safety_gas"].answer in r.turns[0]["reply"] and r.turns[0]["reply"].startswith(P.say("urgent_ack"))
+
+
+def test_a_call_is_flagged_urgent_in_the_turn_Part_1s_safety_words_are_first_said(records):
+    """Invariant over ALL cards (no card names): the first turn whose words contain a safety word flags the call, with that advice."""
+    from safety import emergency_from_text
+    for prefix, r in records.items():
+        first = next((t for t in r.turns if emergency_from_text(t["caller_said"])), None)
+        if first is None:
+            continue
+        assert r.urgent_flagged_at_turn == first["turn"], prefix
+        for kind in emergency_from_text(first["caller_said"]).kinds:
+            assert kind in r.message["safety_advised"] and FAQ[f"safety_{kind}"].answer in first["reply"], (prefix, kind)
+
+
+def test_a_call_is_never_flagged_urgent_without_a_safety_word_or_the_models_flag(records):
+    """The baseline has no model flag, so with it a call is urgent exactly when a safety word was said."""
+    from safety import emergency_from_text
+    for prefix, r in records.items():
+        said_danger = any(emergency_from_text(t["caller_said"]) for t in r.turns)
+        assert r.message["urgent"] == said_danger, prefix
 
 
 def test_the_info_only_caller_is_answered_and_not_pressed_for_a_message(records):
@@ -99,12 +115,16 @@ def test_the_unanswerable_question_is_passed_on_and_still_a_message_is_taken(rec
     assert r.message["name"] == "Gareth Lloyd" and r.message["number"] == "01632960955" and r.outcome == "completed"
 
 
-def test_faq_callers_get_their_expected_answers(records):
+def test_dev_faq_callers_get_their_expected_answers(records):
     assert records["f01"].message["faq_answered"] == ["booking_time"]
-    assert records["f02"].message["faq_answered"] == ["boiler_service"]
-    assert set(records["f05"].message["faq_answered"]) == {"area", "payment"}
-    assert records["f06"].message["faq_answered"] == ["cancellation"]
-    assert records["c16"].message["faq_answered"] == ["prices"]
+    assert records["f03"].message["faq_answered"] == ["hours"]
+
+
+def test_every_faq_answer_given_is_a_real_entry_said_word_for_word(records):
+    """Invariant over all cards: whatever topic was answered, that entry's approved text is in a reply."""
+    for prefix, r in records.items():
+        for topic in r.message["faq_answered"]:
+            assert topic in FAQ and any(FAQ[topic].answer in t["reply"] for t in r.turns), (prefix, topic)
 
 
 def test_dev_card_c14_the_hard_name_is_fixed_by_the_spelling(records):
@@ -132,16 +152,6 @@ def test_dev_card_c07_a_caller_who_will_not_give_a_number_leaves_none(records):
     assert asks.NUMBER_AGAIN in [t["asked"] for t in r.turns]  # asked once more, then recorded as "no number given"
 
 
-def test_c04_never_makes_up_a_number_for_you_have_my_number(records):
-    assert records["c04"].message["number"] is None
-
-
-def test_every_reply_to_a_read_back_question_comes_from_the_state_not_a_model(records):
-    for r in records.values():
-        for t in r.turns:
-            assert t["understanding"] is None or t["understanding"]["fallback"] is False
-
-
 def test_records_are_complete_and_json(records, tmp_path):
     r = records["c14"]
     path = call_module.save_record(r, tmp_path)
@@ -156,8 +166,8 @@ def test_records_are_complete_and_json(records, tmp_path):
 
 
 def test_call_ids_are_unique(records):
-    again = run("c08")
-    assert again.call_id != records["c08"].call_id and again.call_id.startswith("c08_personal_friend-")
+    again = run("c14")
+    assert again.call_id != records["c14"].call_id and again.call_id.startswith("c14_quote_hard_name-")
 
 
 def test_the_call_folder_is_git_ignored():
@@ -170,14 +180,14 @@ def test_on_urgent_is_called_once_in_the_turn_the_call_becomes_urgent():
     r = run("c03", on_urgent=lambda state: seen.append(state.turns))
     assert seen == [1] and r.urgent_flagged_at_turn == 1
     seen.clear()
-    run("c08", on_urgent=lambda state: seen.append(state.turns))
+    run("c14", on_urgent=lambda state: seen.append(state.turns))
     assert seen == []
 
 
 def test_a_dialog_that_never_ends_is_cut_off_not_looped_forever(monkeypatch):
     monkeypatch.setattr(dialog, "apply_limits", lambda state, actions, persona: actions)  # the engine's own limit disabled
     never_ends = lambda state, facts, persona: [dialog.Action(kind="repeat_request")]  # noqa: E731
-    r = call_module.run_call(CARDS["c08"], P, FAQ, UNDERSTAND, decide_fn=never_ends)
+    r = call_module.run_call(CARDS["c14"], P, FAQ, UNDERSTAND, decide_fn=never_ends)
     assert r.cut_off and r.outcome == "cut_off" and len(r.turns) == P.max_turns + call_module.SAFETY_MARGIN_TURNS
 
 
@@ -206,8 +216,8 @@ def fake_audio_channel(tmp_path, speaker=20):
 
 
 def test_an_audio_call_goes_through_listen_and_speak_and_records_the_files(tmp_path):
-    r = run("c08", channel=fake_audio_channel(tmp_path))
-    assert r.channel == "audio" and r.outcome == "completed" and r.message["name"] == "Jamie"
+    r = run("c14", channel=fake_audio_channel(tmp_path))  # a dev card
+    assert r.channel == "audio" and r.outcome == "completed" and r.message["name"] == "Siobhan Gallagher"
     first = r.turns[0]
     assert Path(first["caller_audio"]).exists() and Path(first["reply_audio"]).exists()
     assert first["listen_s"] == 0.25 and first["speak_s"] == 0.05 and first["heard"]["raw_text"]
@@ -215,7 +225,7 @@ def test_an_audio_call_goes_through_listen_and_speak_and_records_the_files(tmp_p
 
 
 def test_an_audio_call_without_a_chosen_voice_still_runs_as_text_replies(tmp_path):
-    r = run("c08", channel=fake_audio_channel(tmp_path, speaker=None))
+    r = run("c14", channel=fake_audio_channel(tmp_path, speaker=None))
     assert r.outcome == "completed" and "reply_audio" not in r.turns[0]
 
 
@@ -223,16 +233,16 @@ def test_an_ignored_turn_reaches_the_dialog_as_silence_and_ends_a_silent_call(tm
     channel = fake_audio_channel(tmp_path)
     channel.listen_fn = lambda wav, hint=None, model=None: Heard(text="", ignored=True, why="silence", raw_text="Thank you.", duration_s=1,
                                                               speech_s=0, min_logprob=None, seconds=0.1)
-    r = run("c08", channel=channel)
+    r = run("c14", channel=channel)
     assert r.outcome == "silence" and len(r.turns) == 2
     assert [t["reply"] for t in r.turns] == [P.say("repeat_request"), P.say("silence_end")]
 
 
 def test_the_command_line_runs_cards_without_a_model_and_saves_only_on_request(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(call_module, "HERE", tmp_path)
-    assert call_module.main(["--card", "c08", "--understand", "rules"]) == 0
+    assert call_module.main(["--card", "c14", "--understand", "rules"]) == 0
     out = capsys.readouterr().out
-    assert "=== c08_personal_friend" in out and "--- outcome=completed" in out and "Jamie" in out
+    assert "=== c14_quote_hard_name" in out and "--- outcome=completed" in out and "Siobhan Gallagher" in out
     assert not (tmp_path / "calls").exists()
     assert call_module.main(["--card", "c11", "--understand", "rules", "--save"]) == 0
     assert len(list((tmp_path / "calls").glob("c11_*.json"))) == 1
@@ -244,3 +254,29 @@ def test_the_command_line_selects_dev_or_score_cards_and_rejects_unknown_ones(ca
     assert printed.count("=== ") == 9
     with pytest.raises(SystemExit):
         call_module.main(["--card", "zzz", "--understand", "rules"])
+
+
+def test_the_call_starts_when_it_starts_not_when_the_record_is_built():
+    from datetime import datetime, timezone
+    import time as _time
+    before = datetime.now(timezone.utc)
+
+    def slow(text, ctx):
+        _time.sleep(0.15)
+        return UNDERSTAND(text, ctx)
+
+    r = call_module.run_call(CARDS["c14"], P, FAQ, slow, understand_label="rules")
+    started = datetime.fromisoformat(r.started)
+    assert (started - before).total_seconds() < 0.5 and r.total_s > 0.5  # the call lasted a while; it began right away
+
+
+def test_the_urgent_hook_runs_before_the_reply_is_spoken():
+    events = []
+
+    class Channel(call_module.TextChannel):
+        def speak(self, reply, turn):
+            events.append(("speak", turn))
+            return {}
+
+    run("c03", channel=Channel(), on_urgent=lambda state: events.append(("push", state.turns)))
+    assert events.index(("push", 1)) < events.index(("speak", 1))

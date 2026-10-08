@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+import ollama
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 HERE = Path(__file__).resolve().parent
@@ -183,20 +184,32 @@ def words_of(text: str) -> list[str]:
     return re.findall(r"[a-z']+", text.lower().replace("’", "'"))
 
 
+STOPWORDS = {"a", "an", "the", "my", "our", "your", "of", "to", "for", "with", "and", "about", "some", "in", "on", "at", "it", "is",
+             "are", "be", "from", "that", "this", "i", "we", "me"}  # ("no" and "not" are NOT stopwords: "no heating" != "heating")
+
+
 def name_is_grounded(name: str, text: str) -> bool:
-    """Every part of the name is a word the caller said, or a run of letters they spelled."""
+    """The name is made of words the caller said, or of letters they spelled (the WHOLE spelled run, not a slice of it)."""
+    parts = words_of(name)
+    if not parts:
+        return False  # "12345" or "-" is not a name
     said = set(words_of(text))
-    spelled = [run.lower() for run in letter_runs(text)]
-    return all(part in said or any(part in run for run in spelled) for part in words_of(name))
+    runs = {run.lower() for run in letter_runs(text)}
+    if all(part in said or part in runs for part in parts):
+        return True
+    return "".join(parts) in runs  # the whole name spelled in one run: S-I-O-B-H-A-N-G-A-L-L-A-G-H-E-R
 
 
 def reason_is_grounded(reason: str, text: str) -> bool:
-    """At least half of the reason's content words (4+ letters) appear, stemmed, in what was said."""
-    content = [stem(w) for w in words_of(reason) if len(w) >= 4]
+    """EVERY content word of the reason (stopwords aside, short words included) appears, stemmed, in what was said.
+
+    Strict on purpose: a paraphrase that adds a word the caller never said ("gas boiler" for "boiler") is replaced by the
+    caller's own words (see ground()). Nothing in a message may be the model's invention."""
+    content = [stem(w) for w in words_of(reason) if w not in STOPWORDS]
     if not content:
-        return True
+        return False
     said = {stem(w) for w in words_of(text)}
-    return sum(w in said for w in content) * 2 >= len(content)
+    return all(w in said for w in content)
 
 
 GREETING_PREFIX = re.compile(r"^(?:(?:hi|hello|hey|oh|um|yeah|yes|alright|good (?:morning|afternoon|evening)|there|mate|love|sorry about the noise)[,.!\s]+)+", re.I)
@@ -215,7 +228,8 @@ def fallback_reason(text: str) -> str | None:
     """
     for sentence in re.split(r"(?<=[.?!])\s+", text.strip()):
         sentence = GREETING_PREFIX.sub("", sentence).strip(" ,.!?")
-        if len(words_of(sentence)) >= 3 and not digit_runs(sentence, min_len=6) and not INTRODUCTION.match(sentence):
+        has_number = bool(digit_runs(sentence, min_len=6))
+        if len(words_of(sentence)) >= 3 and not (has_number and len(sentence.split()) <= 10) and not INTRODUCTION.match(sentence):
             words = sentence.split()[:MAX_REASON_WORDS]
             while len(words) > 3 and words[-1].lower().strip(",") in TRAILING_FILLER:
                 words.pop()  # do not end on "and we" / "the" when the sentence was cut
@@ -251,7 +265,7 @@ def understand(text: str, ctx: UnderstandContext, chat=structured_chat, llm: str
     try:
         reply = chat(CallerTurn, messages, llm=llm, context={"faq_ids": list(ctx.faq_topics)}, fix_hint=FIX_HINT)
     except Exception as error:  # an invalid answer twice, or Ollama not reachable: never end the call because of it
-        if not (isinstance(error, LLMFormError) or is_transient(error)):
+        if not (isinstance(error, (LLMFormError, ollama.ResponseError)) or is_transient(error)):  # e.g. 500 "runner terminated", 404 no model
             raise
         if fallback is None:
             from rules_turn import rules_understand as fallback  # lazy: only needed on failure

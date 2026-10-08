@@ -43,6 +43,10 @@ REQUIRED_LINES: dict[str, set[str]] = {
     "goodbye_spam": set(),
     "silence_end": set(),
     "turn_limit": set(),
+    "what_else": set(),
+    "goodbye_info": set(),
+    "turn_limit_urgent": set(),
+    "silence_end_urgent": set(),
 }
 DETAILS = ("reason", "name", "number")
 

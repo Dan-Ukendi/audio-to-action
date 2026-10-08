@@ -95,9 +95,10 @@ def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_
     (Phase 4 plugs the immediate push in there)."""
     channel = channel or TextChannel()
     caller = SimulatedCaller(card)
+    started_at, started = datetime.now(timezone.utc), time.perf_counter()  # the call starts here, not when the record is built
     greeting, state = dialog.start_call(persona)
     channel.speak(greeting, 0)
-    reply, started = greeting, time.perf_counter()
+    reply = greeting
     urgent_turn, cut_off = None, False
 
     while state.state != dialog.ENDED:
@@ -109,15 +110,15 @@ def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_
         text, heard, caller_io = channel.hear(card, said, state.turns + 1)
         reply, state = dialog.next_reply(state, text, persona, faq, understand_fn, decide_fn, heard=heard)
         entry = state.log[-1]
-        entry.update(asked=asked, caller_said=said, **caller_io, **channel.speak(reply, state.turns))
         if state.urgent and urgent_turn is None:
             urgent_turn = state.turns
             if on_urgent:
-                on_urgent(state)
+                on_urgent(state)  # BEFORE speaking: the push must not wait for the (long) safety advice to be synthesised
+        entry.update(asked=asked, caller_said=said, **caller_io, **channel.speak(reply, state.turns))
 
     return CallRecord(
-        call_id=f"{card.id}-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:6]}", card_id=card.id,
-        started=datetime.now(timezone.utc).isoformat(timespec="seconds"), channel=channel.name, understand=understand_label,
+        call_id=f"{card.id}-{started_at:%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:6]}", card_id=card.id,
+        started=started_at.isoformat(timespec="seconds"), channel=channel.name, understand=understand_label,
         prompt_version=prompt_version, greeting=greeting, turns=state.log, message=dialog.message_of(state),
         outcome=state.outcome if not cut_off else "cut_off", urgent_flagged_at_turn=urgent_turn, cut_off=cut_off,
         total_s=round(time.perf_counter() - started, 3), final_state=state.model_dump(exclude={"log"}))

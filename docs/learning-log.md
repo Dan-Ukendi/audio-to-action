@@ -1751,7 +1751,8 @@ simulated callers. **It has not been run with a real model**: the cloud machine 
 - **Replies are never generated:** an invented price is impossible because no model writes a sentence; a test parses every reply into approved pieces.
 
 ### 5. Files created or changed
-- New: `turn.py`, `rules_turn.py`, `dialog.py`, `safety.py`, `call.py`; `faq.py` (matching), `spoken.py` (`apply_spelling`), `faq.json` (a few keywords, `fallback`).
+- New: `turn.py`, `rules_turn.py`, `dialog.py`, `safety.py`, `call.py`; `faq.py` (matching), `spoken.py` (`apply_spelling`).
+- `faq.json`: `prices` is marked `fallback`; `booking_time` gained `how soon could someone ...` keywords (from the dev card f01); `callback_time` lost the loose keywords `call back` / `call me back` / `get back to me` / `ring me back` (they matched requests such as "can you give me a call back?"); `safety_water` lost the bare `leaking`. `persona.json`: four more fixed sentences (`what_else`, `goodbye_info`, `turn_limit_urgent`, `silence_end_urgent`).
 - `shared/schemas.py`: `normalize_uk_number()` factored out of `Analysis.check_uk_number` (one rule for Part 1 and Part 3).
 - Tests: `test_turn.py`, `test_faq_match.py`, `test_dialog.py`, `test_call.py`.
 

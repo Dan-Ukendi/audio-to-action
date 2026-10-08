@@ -225,14 +225,7 @@
         "do you accept",
         "payment",
         "cash",
-        "cheque",
-        "pay by card",
-        "pay by",
-        "can i pay",
-        "pay with",
-        "pay in cash",
-        "take cards",
-        "accept cards"
+        "cheque"
       ],
       "answer": "You can pay by card or by bank transfer."
     },
@@ -379,8 +372,7 @@
         "stop cock",
         "water everywhere",
         "through the ceiling",
-        "leaking badly",
-        "leaking"
+        "leaking badly"
       ],
       "answer": "If water is leaking, turn it off at the stopcock if you can reach it safely. If water is near electrics, switch the electricity off at the fuse box only if you can do it without standing in water, and keep away from wet sockets and appliances."
     }
