@@ -363,7 +363,7 @@ def test_after_flag_urgent_a_fallback_asks_for_the_number_not_the_spelling_or_a_
 def test_a_name_refusal_does_not_let_the_agent_skip_the_number_that_is_still_missing():
     s = new()
     _, s, _ = say(s, "My tap is dripping.", scripted([tc("ask", detail="name")]))
-    reply, s, trace = say(s, "I'd rather not say", scripted([tc("read_back")], [tc("ask", detail="name")]), refused_name=True)
+    reply, s, trace = say(s, "I'd rather not say", scripted([tc("read_back")], [tc("ask", detail="name")]))
     assert "read_back" not in trace["legal"] and not s.slots["number"].given_up and s.state != "READ_BACK"
 
 
@@ -391,3 +391,10 @@ def test_an_agent_that_flags_urgent_and_then_fails_still_gets_the_acknowledgemen
     chat = scripted([tc("flag_urgent", why="gas")], [tc("take_message")], [tc("take_message")], [tc("take_message")])
     reply, s, trace = say(new(), "Hi, my tap is dripping", chat)
     assert trace["fallback"] and s.urgent and reply.startswith(line("urgent_ack")) and reply.endswith(line("ask_name"))
+
+
+def test_an_already_urgent_call_gets_no_read_back_after_a_number_refusal_the_number_is_asked_again():
+    s = new()
+    _, s, _ = say(s, "There's a smell of gas in the hallway. I'm Dave.", scripted([tc("ask", detail="number")]))
+    reply, s, trace = say(s, "I'd rather not give my number", scripted([tc("read_back")], [tc("ask", detail="number")]))
+    assert s.urgent and "read_back" not in trace["legal"] and not s.slots["number"].given_up and s.state != "READ_BACK"

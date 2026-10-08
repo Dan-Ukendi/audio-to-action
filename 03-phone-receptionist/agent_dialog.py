@@ -12,7 +12,7 @@ agent can change WHICH legal action comes next, never WHAT is said and never WHA
   - EVERY call is validated (Pydantic) and answered with advice, never a crash ("ERROR: the name is already known ...").
   - LEGALITY comes from the state. The state machine's own decision is always one legal option; a few more are allowed where
     judgement can matter (stop asking after a refusal, ask what to change instead of repeating a read-back, end a call that is
-    going nowhere). take_message only after a yes, end_call only when it is legal, ask only for what is legal. An illegal choice is
+    going nowhere). take_message only after a yes or a further request, end_call only when it is legal, ask only for what is legal. An illegal choice is
     refused with what to do instead.
   - STATE, not history: every step the model gets a fresh message (what the caller said, what is known, what is legal, feedback on
     its last calls), as in Part 2, where a growing chat made the agent replay its failing calls.
@@ -97,7 +97,7 @@ TOOLS: dict[str, tuple[type[BaseModel], str]] = {
     "answer_faq": (AnswerFaqArgs, "Give the approved answer to a question the caller asked."),
     "read_back": (ReadBackArgs, "Read the message back (name, number, reason) and ask if it is right."),
     "flag_urgent": (FlagUrgentArgs, "Flag the call as urgent (only for danger now; never if already flagged)."),
-    "take_message": (TakeMessageArgs, "The caller said yes to the read-back: confirm and ask if there is anything else."),
+    "take_message": (TakeMessageArgs, "The caller said yes to the read-back, or added a further request: confirm and ask if there is anything else."),
     "end_call": (EndCallArgs, "Say goodbye and end the call."),
 }
 
@@ -155,11 +155,15 @@ def build_turn(state: CallState, facts: Facts, persona: Persona) -> Turn:
             and any(s.value for s in state.slots.values()) and nothing_else_missing(state, persona, give_up)):
         legal["read_back"] = [Action(kind="read_back")]                  # they refused: respect it, read back what we have
     pending = [a.arg for a in candidate if a.kind == "faq"]
-    return Turn(state, facts, persona, candidate, floor, pending, legal, give_up=give_up)
+    turn = Turn(state, facts, persona, candidate, floor, pending, legal, give_up=give_up)
+    if state.urgent:
+        keep_urgent_legal(turn)  # an urgent call asks for the number first, whoever flagged it
+    return turn
 
 
 def nothing_else_missing(state: CallState, persona: Persona, given_up: list[str]) -> bool:
-    """Would the state machine have nothing left to ask once the refused details are given up? (tried on a copy)"""
+    """Would the state machine have nothing left to ask once the refused details are given up? (tried on a copy, where any other
+    already-exhausted detail is given up too, as the state machine itself would do)"""
     trial = copy.deepcopy(state)
     for detail in given_up:
         trial.slots[detail].given_up = True
@@ -244,8 +248,12 @@ def advice(turn: Turn, key: str) -> str:
     if key == "take_message":
         return "The caller has not said yes to a read-back or added a request. Use read_back() when nothing is missing, otherwise ask(the next missing detail)."
     if key == "end_call":
+        if st.state == dialog.GOODBYE:
+            return "The caller added a request: use take_message() so it is added to the message."
         return "The caller has not finished and the message is not complete. Keep going with ask(...) or read_back()."
     if key == "read_back":
+        if st.state != dialog.COLLECTING and st.state != dialog.GREETING:
+            return "The message was already read back; follow the legal actions."
         return "Something is still missing: ask for it first."
     if key.startswith("ask:") and key[4:] in ("reason", "name", "number") and st.value(key[4:]):
         return f"The {key[4:]} is already known ({st.value(key[4:])}); never ask for a detail we have."
