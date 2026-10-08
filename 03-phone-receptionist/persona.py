@@ -143,7 +143,7 @@ def speaker_id(persona: Persona) -> int:
     chosen = int(override) if override else persona.speaker
     check_speaker(chosen)
     if chosen is None:
-        raise PersonaError("no receptionist voice chosen yet: run 'python 03-phone-receptionist/choose_voice.py' (written in Phase 2), "
+        raise PersonaError("no receptionist voice chosen yet: run 'python 03-phone-receptionist/choose_voice.py', "
                            "listen, then put the number in persona.json (piper_speaker)")
     if chosen in persona.taken_voice_ids:
         raise PersonaError(f"speaker {chosen} belongs to a Part 1/2 voice; the receptionist needs her own")

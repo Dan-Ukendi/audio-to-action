@@ -3,7 +3,7 @@
   "business": "Brightwater Plumbing & Heating",
   "receptionist": "Holly",
   "piper_speaker": null,
-  "piper_speaker_note": "null until the owner picks a voice on the laptop in Phase 2 (python 03-phone-receptionist/choose_voice.py, written in Phase 2). Must not be in voice_ids_taken. The RECEPTIONIST_SPEAKER environment variable overrides this value for a single run.",
+  "piper_speaker_note": "null until the owner picks a voice on the laptop in Phase 2 (python 03-phone-receptionist/choose_voice.py). Must not be in voice_ids_taken. The RECEPTIONIST_SPEAKER environment variable overrides this value for a single run.",
   "voice_ids_taken": {
     "part2_meeting_voices": [7, 0, 9, 11],
     "part1_callers": [3, 5, 11, 15, 25, 27, 33, 40, 45, 50, 55, 60, 64, 72, 80, 90],

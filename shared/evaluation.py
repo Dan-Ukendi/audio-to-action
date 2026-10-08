@@ -68,3 +68,20 @@ def word_errors(reference: str, hypothesis: str) -> tuple[int, int]:
 
 def pct(part: int, whole: int) -> str:
     return f"{part}/{whole} ({part / whole:.0%})" if whole else "n/a"
+
+
+def percentile(values: list[float], q: float) -> float | None:
+    """The q-th percentile (0-100) by linear interpolation; None for an empty list. percentile(v, 50) is the median."""
+    if not values:
+        return None
+    if not 0 <= q <= 100:
+        raise ValueError(f"percentile must be between 0 and 100, got {q}")
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * q / 100
+    low = int(position)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+
+def median(values: list[float]) -> float | None:
+    return percentile(values, 50)

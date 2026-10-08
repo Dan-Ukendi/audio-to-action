@@ -1654,3 +1654,63 @@ On the laptop (needs the Piper voice): `python 03-phone-receptionist\simulate.py
 ### 9. Next phase preview
 Phase 2 builds the audio loop: listen (Whisper) and speak (Piper) for one turn, a push-to-talk page in the browser, and the scripts that
 measure how long each stage takes on the laptop. The measurements themselves cannot be made in the cloud.
+
+## Part 3, Phase 2: Audio loop and speed budget (2026-10-08)
+
+### 1. What we built
+The audio plumbing of one phone turn: the caller's recording goes in, Whisper turns it into text (or decides nobody spoke), a reply
+text comes back, Piper says it. Around that: a push-to-talk page for the browser, a script that times every stage on the laptop,
+and a script that renders candidate voices so you can pick Holly's. **The speed numbers themselves are not measured**: the cloud
+machine has no GPU, Whisper model, Ollama model or Piper voice. `docs/part3-speed.md` says so and lists the commands.
+
+### 2. Where it fits in the pipeline
+```
+ caller ─► LISTEN ─► understand ─► decide ─► SPEAK ─► ... ─► hand off to Part 1
+          audio_io.listen                    audio_io.speak
+ [Phase 2: audio_io.py, audio_loop.process_turn, session.py, app.py, measure_speed.py, choose_voice.py]  <-- you are here
+```
+
+### 3. How it works, step by step
+- `audio_io.listen()` transcribes one turn (hint = team and places, never customer names) and returns `Heard`. It marks the turn
+  **ignored** if it holds under 0.3 s of speech, if Whisper thinks it is all silence, or if it is only a phrase Whisper invents on silence and Whisper is unsure about it (a confident "Thank you." is kept).
+- `audio_io.speak()` synthesizes the reply with Piper and returns how long that took.
+- `audio_loop.process_turn()` = listen, then `respond(text, heard)` (where the dialog plugs in), then speak; it times each stage.
+- `session.AudioSession` keeps the turns of a call (files, timings) for the page; `scripted_responder` says fixed persona lines until Phase 3.
+- `app.py`: Streamlit page with `st.audio_input`; all logic is in `session.py`. Tested headless with Streamlit's `AppTest`.
+- `measure_speed.py` (laptop): times Whisper (base/small, CPU/GPU), the LLM (7b/3b) and Piper on the dev caller clips, then applies the
+  rule written before the measurement and rewrites `docs/part3-speed.md`. `choose_voice.py` renders a dozen free voices.
+
+### 4. Key concepts I should understand
+- **A speed budget is a sum:** the caller waits for listen + understand + speak, so each stage is measured separately and the median is judged against 5 s.
+- **Silence is not "no text":** Whisper always writes something; deciding whether anyone spoke is a separate, testable step.
+- **Honest placeholders:** a report that says "NOT MEASURED YET" and how to measure it is better than a plausible-looking number.
+- **Inject the models:** `listen(..., transcribe_fn=)` and `speak(..., synth_fn=)` let the tests run in milliseconds with fakes.
+
+### 5. Files created or changed
+- `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` (new); `docs/part3-speed.md` (placeholder).
+- `shared/evaluation.py`: `percentile()` and `median()` added. `requirements.txt` already lists streamlit.
+- Tests: `test_audio_io.py`, `test_audio_loop.py`, `test_session.py`, `test_measure_speed.py`, `test_app.py`.
+
+### 6. Try it yourself
+```powershell
+python -m pytest 03-phone-receptionist\tests -q
+python 03-phone-receptionist\choose_voice.py
+python 03-phone-receptionist\measure_speed.py --device cpu --whisper base small --llm qwen2.5:7b
+python -m streamlit run 03-phone-receptionist\app.py
+```
+Expected on the laptop: voice samples in `testset\voice_samples\`; a table of medians in `docs\part3-speed.md`; the page greets you and
+repeats fixed questions while showing what Whisper heard and the seconds per stage.
+
+### 7. What can go wrong
+- The 5 s target is unmeasured; on CPU the 7B model is expected to take 30-200 s per reply (from the plan), so the GPU fix comes first.
+- The page needs a browser microphone; `st.audio_input` needs Streamlit 1.40+ (1.65 is installed).
+- The list of invented phrases is a guess at Whisper's habits; check `Whisper wrote ...` captions on the page and extend it.
+
+### 8. Check my understanding
+1. Why is the first model call timed separately from the others?
+2. Why does `listen()` return the raw Whisper text even when it ignores the turn?
+3. What does the rule pick if `base` misses two names that `small` gets right?
+
+### 9. Next phase preview
+Phase 3 builds the dialog engine (version A): the per-turn form the LLM fills, the state machine that decides what to say, the FAQ matcher
+and the call runner, tested against all 24 simulated callers.

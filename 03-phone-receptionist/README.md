@@ -20,7 +20,7 @@ because they have not been measured**; section 8 lists every command that produc
     │
     ▼
  1. LISTEN      ffmpeg → 16 kHz → Whisper (hint: team, places; never customer names) → text      shared/transcribe.py
-                turns with under ~0.5 s of speech are ignored (Whisper invents "Thank you." on silence)
+                turns with under 0.3 s of speech, or only a doubtful invented phrase, are ignored (Whisper invents "Thank you." on silence)
  2. UNDERSTAND  LLM fills a per-turn form (CallerTurn): details given, correction, question, emergency, end    turn.py
                 plain-code rules check it: UK number rule, the words must really have been said (grounding)
  3. DECIDE      version A: a state machine in plain code (dialog.py)      version B: a boxed tool-calling agent
@@ -69,6 +69,8 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 15 | Which callers, and what they do | The 18 Part 1 scenarios become calls (same speakers, same labels). The 6 FAQ callers, their questions, all scripted openings and every quirk are mine; see `testset/README.md`. 9 dev cards (c03, c07, c11, c13, c14, c18, f01, f03, f04) cover the core behaviours once (emergency, refused number, robocall, wrong-then-corrected number, spelled name, in-sentence correction, a question, info-only, an unanswerable question); the other 15 are for scoring only. Behaviours only the scoring run sees: a caller who withholds the name or number, an all-in-one opening, a rambling opening, two questions in one turn and a new request after "anything else?". | The plan asked for "4-6 FAQ callers"; replace any card, `cards.py` re-checks the key. |
 | 16 | Callers who only ask questions | If a caller's first turn is only FAQ questions (no request), Holly answers and asks "anything else?" instead of pressing for a message; a new request after that goes back to collecting details. An unanswerable question is passed on in the message. | The plan does not say when a message is required. Such a call ends `info_only`. |
 | 17 | The simulated caller checks the read-back | It notices a wrong name or number in Holly's read-back and corrects it (at most twice), like a real caller. Without this the correction flow would never run on the cards. | Deterministic. It checks the name (whole words) and the number; a caller who gave no name cannot object to an invented one (Holly's sentence would have to be parsed). |
+| 18 | The page before the dialog exists | `app.py` replies with a fixed sequence of persona lines whatever the caller says (and says so on screen). It is for checking what Whisper hears and for timing the loop, not a conversation. Without a chosen voice it shows replies as text. | Replaced by the dialog engine in Phase 3 / 7. |
+| 19 | When a turn counts as silence | Under 0.3 s of speech; or every segment above 0.6 no-speech probability; or the text is just "thank you / thanks (for watching) / you / bye / please subscribe" **and Whisper doubts it**: under 1.5 s of speech with confidence below -0.8, or (any length) a segment with no-speech probability above 0.3. A confident "Thank you." and a bare "Yes." / "Okay." are real answers and are kept. | The plan says "ignore turns under ~0.5 s"; 0.3 s keeps a one-word answer. The phrase list and the doubt rule are mine. All thresholds are constants at the top of `audio_io.py`. |
 
 (More rows are added below as later phases take decisions.)
 
@@ -111,7 +113,7 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 |---|---|---|---|
 | 0 | Plan, persona, FAQ, folders | built; the owner has not yet confirmed persona/FAQ wording, and the laptop GPU check is pending (decisions 1-4) | this file, `persona.json`, `faq.json`, `persona.py`, `faq.py` |
 | 1 | Synthetic callers (cards + labels + simulator) | built | `testset/callers.json`, `cards.py`, `simulate.py`, `spoken.py`, `asks.py`, `testset/README.md` |
-| 2 | Audio loop + speed budget | not started | |
+| 2 | Audio loop + speed budget | built; **the speeds are not measured** (laptop only), see `docs/part3-speed.md` | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` |
 | 3 | Dialog version A | not started | |
 | 4 | Hand-off to Part 1 | not started | |
 | 5 | Dialog version B (agent) | not started | |
@@ -145,10 +147,18 @@ The commands are filled in as each phase is built; the complete ordered list wil
 cd C:\Users\danuk\code\audio-to-action
 .\.venv\Scripts\Activate.ps1
 git fetch origin part3-receptionist; git checkout part3-receptionist
-nvidia-smi                      # the RTX 5050 must be listed without "Code 43"
-ollama ps                       # while a model runs: PROCESSOR should say 100% GPU
+pip install -r requirements.txt                     # installs streamlit too
+nvidia-smi                                          # the RTX 5050 must be listed without "Code 43"
+ollama ps                                           # while a model runs: PROCESSOR should say 100% GPU
 python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests 03-phone-receptionist\tests -q
+
+# Phase 2: voice and speed (the numbers in docs\part3-speed.md exist only after this)
+python 03-phone-receptionist\choose_voice.py       # listen to testset\voice_samples\*.wav, set piper_speaker in persona.json
+python 03-phone-receptionist\measure_speed.py --device cpu  --whisper base small --llm qwen2.5:7b
+python 03-phone-receptionist\measure_speed.py --device cuda --whisper base small --llm qwen2.5:7b qwen2.5:3b   # after the GPU fix; ask before pulling qwen2.5:3b (~1.9 GB)
+python -m streamlit run 03-phone-receptionist\app.py   # push-to-talk page (prototype replies until the dialog is wired in)
 ```
+Later phases add their own commands here.
 
 ## 9. Lessons from Parts 1-2 applied from day one
 - The answer key (caller cards and labels) is written **before** the dialog code, and prompts are tuned on `dev` cards only.
