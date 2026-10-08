@@ -34,9 +34,11 @@ NAME_STOP = {"from", "here", "and", "calling", "at", "on", "in", "with", "about"
              # questions, fillers, closings and the words of the correction question are not names
              "pardon", "bye", "goodbye", "hmm", "could", "would", "can", "is", "do", "does", "who", "what", "how", "when", "where",
              "why", "are", "will", "number", "name", "reason", "your", "yours", "wrong", "right", "correct", "actually", "also",
-             "nothing", "nope", "thank", "mate", "morning", "afternoon", "evening"}
+             "nothing", "nope", "thank", "mate", "morning", "afternoon", "evening", "hold", "hang", "sure", "cheers", "great",
+             "speak", "can't", "cant", "won't", "don't", "wait", "one", "moment", "second", "minute", "pardon"}
 ENDING = re.compile(r"\b(that'?s all|that is all|that'?s everything|nothing else|no thanks|no,? thank you|goodbye)\b", re.I)
-AUTOMATED = re.compile(r"\b(automated message|recorded message|press (one|1|two|2)|legal proceedings|this is an automated)\b", re.I)
+# Strong robocall markers only: a person can say "I got an automated message from you" or "a recorded message".
+AUTOMATED = re.compile(r"\b(press (one|1|two|2)|legal proceedings|this is an automated)\b", re.I)
 
 
 def ends_call(text: str) -> bool:
@@ -88,8 +90,8 @@ def find_reason(text: str, asked: str) -> str | None:
         return None
     kept = []
     for sentence in re.split(r"(?<=[.?!])\s+", text.strip()):
-        if (digit_runs(sentence, min_len=6) or NAME_INTRO.search(sentence)) and len(sentence.split()) <= 10:
-            continue  # a short "my number is ..." or "this is X" sentence is not the reason
+        if (digit_runs(sentence, min_len=6) and len(sentence.split()) <= 10) or (find_name(sentence, asked) and len(sentence.split()) <= 8):
+            continue  # a short "my number is ..." sentence, or "this is Mark Thompson", is not the reason
         if faq_module.looks_like_question(sentence) and (faq_module.match_questions(sentence, FAQ).entries
                                                          or faq_module.is_small_talk(sentence)):
             continue  # a question about the business (answered), or small talk / "could you repeat that" is not the reason

@@ -1769,6 +1769,8 @@ Expected: the tests pass; a transcript where Holly asks for the spelling and rea
 - The rules baseline cannot judge urgency from context (it misses c04 and c06) or paraphrase a reason; the model is expected to.
 - A caller who answers the read-back with a long unrelated story is read back again and eventually hits the turn limit.
 
+**Review record (independent Opus reviewers):** round 1 FAIL (17 findings: grounding that never ran for a custom understanding step, an emergency lost to the spam check, premature hang-ups, a lost second request, tuning to score cards, ...), round 2 FAIL (11: junk stored as a name, naming the wrong field, false-positive number repairs, "yeah no", endless read-backs, lost late corrections, ...), round 3 FAIL (3: a robocall pattern hanging up on real callers, the phone number leaking into the reason, "I'm calling about ..." not taken as a reason). The round-3 findings were fixed afterwards and covered by new tests plus a seeded 300-call fuzz of the engine's invariants, **but not reviewed again** (limit: 3 rounds per phase). Open known limits: the rules baseline cannot judge urgency from context or paraphrase a reason, and "Do you fix gas leaks?" is treated as an emergency (safety first).
+
 ### 8. Check my understanding
 1. Why is a number the model reports thrown away if the caller did not say it?
 2. What is the difference between `apply_turn` and `decide_a`, and which one will the agent replace?

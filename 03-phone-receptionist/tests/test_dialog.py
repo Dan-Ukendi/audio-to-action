@@ -865,3 +865,113 @@ def test_a_repeated_plain_yes_to_what_else_does_not_loop_to_the_turn_limit():
         if s.state == "ENDED":
             break
     assert replies[0] == line("what_else") and s.state == "ENDED" and s.turns <= 6 and s.outcome == "completed"
+
+
+# ---------------------------------------------------------------- review round 3
+
+def test_a_person_who_mentions_an_automated_message_is_not_hung_up_on():
+    for text in ("Hi, I got an automated message from you saying my appointment on Thursday was moved.",
+                 "I left a recorded message yesterday about my boiler but nobody called back."):
+        for step in (lambda s, t: rules_say(s, t), lambda s, t: say(s, t, reason="my appointment")):
+            s = new()
+            reply, s = step(s, text)
+            assert not s.spam and s.state != "ENDED" and reply != line("goodbye_spam"), text
+
+
+def test_an_urgent_call_can_never_end_as_spam():
+    s = new()
+    _, s = rules_say(s, "There's water everywhere, a pipe has burst!")
+    _, s = rules_say(s, "Mark Thompson, 07700 900123")
+    reply, s = rules_say(s, "Sorry, it says press one on my phone, hang on")
+    assert s.urgent and not s.spam and s.outcome != "spam" and reply != line("goodbye_spam")
+    s = new()  # not even a model that insists it is a robocall, once the call is urgent or has details
+    _, s = say(s, "x", reason="a leak", name="Dave")
+    reply, s = say(s, "Press one now", is_automated=True)
+    assert not s.spam and s.state != "ENDED"
+
+
+def test_a_robocall_is_still_hung_up_on_at_the_start_of_a_call():
+    s = new()
+    reply, s = rules_say(s, "This is an automated message from the tax office. Press one to speak to an officer.")
+    assert s.spam and reply == line("goodbye_spam")
+
+
+def test_the_phone_number_never_ends_up_in_the_reason_or_in_what_is_spoken():
+    s = new()
+    _, s = rules_say(s, "Hi, my kitchen tap is dripping and my number is 07700 900123.")
+    assert s.value("reason") == "my kitchen tap is dripping" and s.value("number") == "07700900123"
+    s = new()
+    reply, s = rules_say(s, "My boiler is leaking a bit, you can ring me on oh seven seven double oh nine hundred one two three")
+    assert s.value("reason") == "My boiler is leaking a bit" and s.value("number") == "07700900123"
+    s = new()  # a model that paraphrases the reason on a sentence that also carries the number
+    reply, s = say(s, "My faucet is leaking and my number is 07700 900123.", reason="a leaky faucet", number="07700900123")
+    assert s.value("reason") and not any(ch.isdigit() for ch in s.value("reason"))
+    assert not any(ch.isdigit() for ch in reply)
+
+
+def test_digits_in_a_reason_are_spoken_as_words():
+    s = new()
+    s.slots["reason"].value = "the heater at 42 Mill Lane, error F 28"
+    spoken = dialog.render([dialog.Action(kind="read_back")], s, P, FAQ)
+    assert "forty-two Mill Lane" in spoken and not any(ch.isdigit() for ch in spoken)
+
+
+def test_im_calling_about_and_its_about_give_a_reason_on_the_rules_path():
+    for text in ("Hi, I'm calling about a leak under the sink.", "It's about a leak under the sink.", "It's a leak under the sink."):
+        s = new()
+        _, s = rules_say(s, text)
+        assert s.value("reason") and "leak" in s.value("reason"), text
+    s = read_back_state()
+    _, s = rules_say(s, "No.")
+    _, s = rules_say(s, "What it's about.")
+    reply, s = rules_say(s, "It's about a radiator that won't heat up")
+    assert "radiator" in s.value("reason") and s.value("name") == "Dave" and s.state == "READ_BACK"
+
+
+def test_short_replies_to_the_name_question_are_not_names():
+    for junk in ("Hold on", "Hang on a second", "Sure", "Cheers", "Great", "Speak up", "Can't hear you"):
+        s = new()
+        _, s = rules_say(s, "My boiler is broken.")
+        _, s = rules_say(s, junk)
+        assert s.value("name") is None, junk
+
+
+def test_it_ends_in_digits_at_the_read_back_is_a_correction_without_the_word_no():
+    s = read_back_state(number="07700900123")
+    _, s = rules_say(s, "It ends in 349")
+    assert s.value("number") == "07700900349"
+
+
+# ---------------------------------------------------------------- a seeded fuzz: the engine's invariants over random calls
+
+FUZZ_POOL = ["", "Hello?", "Yes", "No", "No.", "My name is Dave Smith", "It's Ann Lee", "My number is 07700 900123",
+             "oh seven seven double oh nine hundred one two three", "There's a smell of gas in the hallway",
+             "My tap is dripping and my number is 07700 900123.", "Do you cover Overmere?", "What are your opening hours?",
+             "Could you repeat that?", "Bye.", "That's all, thanks", "Actually my number is 07700 900222", "No, it's 349",
+             "Number.", "S, M, I, T, H", "Pardon?", "I'd rather not say", "You've got my number", "It's about a leak under the sink",
+             "I'm calling about a leak under the sink", "Press one", "This is an automated message. Press one now.",
+             "Do you fit solar panels?", "Is that dangerous?", "Yeah no, that's wrong", "42 Mill Lane", "Thank you", "Um, well.",
+             "No heating and no hot water here", "The name.", "It ends in 349", "Can you give me a call back?"]
+
+
+def test_random_calls_keep_every_invariant():
+    import random
+    from rules_turn import rules_understand
+    rng = random.Random(20261008)
+    for call in range(300):
+        s = new()
+        last = ""
+        for _ in range(P.max_turns + 3):
+            reply, s = next_reply(s, rng.choice(FUZZ_POOL), P, FAQ, lambda t, c: Understanding(rules_understand(t, c)))
+            if s.state == "ENDED":
+                last = reply
+                break
+        assert s.state == "ENDED" and s.turns <= P.max_turns, call
+        assert s.outcome, call
+        assert next_reply(s, "hello again", P, FAQ, lambda t, c: Understanding(form()))[0] == ""  # an ended call stays ended
+        number = s.value("number")
+        assert number is None or (number.startswith("0") and number.isdigit() and 10 <= len(number) <= 11), (call, number)
+        if s.urgent:
+            assert s.outcome != "spam" and "nine nine nine" in last, (call, s.outcome, last)
+        for entry in s.log:
+            assert not any(ch.isdigit() for ch in entry["reply"]), (call, entry["reply"])

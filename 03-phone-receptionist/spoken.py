@@ -52,30 +52,79 @@ def number_at(tokens: list[str], i: int, in_run: bool) -> tuple[str, int] | None
     return None
 
 
-def digit_runs(text: str, min_len: int = 1) -> list[str]:
-    """Every run of spoken or written digits in the text, in order, keeping runs of at least min_len digits."""
-    # "+44 1632 960501", "+44 (0) 1632 960501" and "plus four four 1632 960501" are all 01632 960501.
-    lowered = re.sub(r"\(\s*0\s*\)", " ", text.lower())
+def digit_spans(text: str, min_len: int = 1) -> list[tuple[str, int, int]]:
+    """(digits, start, end) for every run of spoken or written digits; start/end are character positions in `text`."""
+    # "+44 1632 960501", "+44 (0) 1632 960501" and "plus four four 1632 960501" are all 01632 960501. The rewrites keep the
+    # text length, so the positions still point into the original text.
+    lowered = re.sub(r"\(\s*0\s*\)", lambda m: " " * len(m.group()), text.lower())
     lowered = lowered.replace("+44", " 0 ")
-    lowered = re.sub(r"\bplus\s+(four\s+four|forty[\s-]+four)\b", " 0 ", lowered)
-    tokens = re.findall(r"\d+|[a-z']+", lowered)
-    runs: list[str] = []
-    current = ""
+    lowered = re.sub(r"\bplus\s+(four\s+four|forty[\s-]+four)\b", lambda m: "0" + " " * (len(m.group()) - 1), lowered)
+    found_tokens = [(m.group(), m.start(), m.end()) for m in re.finditer(r"\d+|[a-z']+", lowered)]
+    tokens = [t for t, _, _ in found_tokens]
+    spans: list[tuple[str, int, int]] = []
+    current, begin, end = "", 0, 0
     i = 0
     while i < len(tokens):
         found = number_at(tokens, i, in_run=bool(current))
         if found:
             digits, used = found
+            if not current:
+                begin = found_tokens[i][1]
+            end = found_tokens[i + used - 1][2]
             current += digits
             i += used
         else:
             if current:
-                runs.append(current)
+                spans.append((current, begin, end))
             current = ""
             i += 1
     if current:
-        runs.append(current)
-    return [r for r in runs if len(r) >= min_len]
+        spans.append((current, begin, end))
+    return [span for span in spans if len(span[0]) >= min_len]
+
+
+def digit_runs(text: str, min_len: int = 1) -> list[str]:
+    """Every run of spoken or written digits in the text, in order, keeping runs of at least min_len digits."""
+    return [digits for digits, _, _ in digit_spans(text, min_len)]
+
+
+NUMBER_INTRO = re.compile(r"[\s,;:-]*(?:(?:and|but|so|oh|well)\s+)?(?:(?:my|the|our)\s+)?(?:(?:phone|mobile|contact|telephone|landline|home)\s+)?"
+                          r"(?:numbers?(?:'s)?|digits)?\s*(?:is|are|on|at|it'?s)?\s*$", re.I)
+CALL_ME = re.compile(r"[\s,;:-]*(?:(?:and|but|so)\s+)?(?:you can\s+)?(?:call|ring|phone|text|reach|contact)\s+(?:me|us)\s+(?:on|at)?\s*$", re.I)
+
+
+def without_number(sentence: str) -> str:
+    """The sentence cut off before its first phone number and the words that introduce it ('... and my number is').
+
+    'My tap is dripping and my number is 07700 900123.' -> 'My tap is dripping'. A reason must not carry a phone number:
+    the number has its own place in the message, and the read-back would speak it as a stray string of digits."""
+    spans = digit_spans(sentence, min_len=6)
+    if not spans:
+        return sentence
+    head = sentence[: spans[0][1]]
+    for pattern in (CALL_ME, NUMBER_INTRO):
+        head = pattern.sub("", head)
+    return head.strip(" ,;:-+(")
+
+
+ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+        "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+TENS_WORDS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+
+def number_to_words(n: int) -> str:
+    if n < 20:
+        return ONES[n]
+    if n < 100:
+        return TENS_WORDS[n // 10] + (f"-{ONES[n % 10]}" if n % 10 else "")
+    return f"{ONES[n // 100]} hundred" + (f" and {number_to_words(n % 100)}" if n % 100 else "")
+
+
+def digits_to_words(text: str) -> str:
+    """'42 Mill Lane' -> 'forty-two Mill Lane'; digit strings longer than three are read digit by digit. For text that is spoken."""
+    spoken = re.sub(r"\d+", lambda m: " " + (number_to_words(int(m.group())) if len(m.group()) <= 3
+                                            else " ".join(ONES[int(d)] for d in m.group())) + " ", text)
+    return re.sub(r"\s+", " ", spoken).replace(" ,", ",").replace(" .", ".").strip()
 
 
 NUMBER_VOCABULARY = set(UNITS) | set(TEENS) | set(TENS) | set(REPEATERS) | {"hundred", "and"}

@@ -38,7 +38,7 @@ from persona import Persona, first_name, speak_number  # noqa: E402
 from rules_turn import AUTOMATED, NO, YES, ends_call  # noqa: E402
 from safety import emergency_from_text  # noqa: E402
 from shared.schemas import normalize_uk_number  # noqa: E402
-from spoken import apply_spelling, digit_runs, letter_runs, non_number_words  # noqa: E402
+from spoken import apply_spelling, digit_runs, digits_to_words, letter_runs, non_number_words  # noqa: E402
 from turn import UnderstandContext, Understanding, ground  # noqa: E402
 
 GREETING, COLLECTING, READ_BACK, CORRECTING, GOODBYE, ENDED = (
@@ -56,7 +56,8 @@ REFUSED_NUMBER = re.compile(r"\b(you'?ve got my number|you have my number|you al
                             r"not going to (give|say|read)|no number)\b", re.I)
 REFUSED_NAME = re.compile(r"\b(rather not|don'?t want to (say|give)|not going to (say|give)|no name|prefer not)\b", re.I)
 REMOVE_NUMBER = re.compile(r"(didn'?t give you a number|take (that|the) number off|there is no number|no number to give)", re.I)
-REPEAT_REQUEST = re.compile(r"\b(repeat that|say that again|come again|pardon|didn'?t (catch|hear)|can you repeat|could you repeat)\b", re.I)
+REPEAT_REQUEST = re.compile(r"\b(repeat that|say that again|come again|pardon|didn'?t (catch|hear)|can you repeat|could you repeat|"
+                            r"can'?t hear|speak up)\b", re.I)
 END_WORDS = re.compile(r"\b(ends?|ending|last|final)\b", re.I)
 NOT_AN_END = re.compile(r"\b(starts?|starting|begins?|beginning|flat|house|apartment|at|after|before|street|road|lane|avenue|close|floor)\b", re.I)
 LATE_NO = re.compile(r"\b(no|nope)\b\s*[,.!?]|\b(wrong|incorrect|not (right|correct|quite))\b", re.I)  # "Yeah no, that's wrong"
@@ -185,7 +186,10 @@ def apply_turn(state: CallState, text: str, understanding: Understanding, person
 
     # A robocall is hung up on, EXCEPT when real safety words are in it: a person who says "final notice ... and I can smell
     # gas" must not be hung up on, whatever the model or the pattern thinks.
-    if (turn.is_automated or AUTOMATED.search(text)) and not danger:
+    # A robocall plays at the start of a call, to nobody. After the first turn, once the call is urgent or details were given, a
+    # person is on the line: "sorry, it says press one on my phone" must never end an emergency as spam.
+    first_contact = state.turns == 1 and not state.urgent and not any(s.value for s in state.slots.values())
+    if first_contact and (turn.is_automated or AUTOMATED.search(text)) and not danger:
         facts.spam = True
         state.spam = True
         return facts
@@ -209,7 +213,8 @@ def apply_turn(state: CallState, text: str, understanding: Understanding, person
     # read-back, or "actually my number is ..." after "anything else?" (a late correction, never a new reason).
     late_correction = (waiting == asks.ANYTHING_ELSE and bool(turn.name or turn.number)
                        and (turn.is_correction or bool(CORRECTION_WORDS.search(text))))  # "actually my number is ..."
-    correcting = (state.state == CORRECTING or (waiting == asks.CONFIRM and (facts.no or turn.is_correction)) or late_correction)
+    ends_in = bool(END_WORDS.search(text)) and bool([r for r in digit_runs(text, min_len=2) if len(r) < 8])  # "It ends in 349"
+    correcting = (state.state == CORRECTING or (waiting == asks.CONFIRM and (facts.no or turn.is_correction or ends_in)) or late_correction)
     allowed = set(DETAILS)
     if correcting:
         if state.state == CORRECTING and waiting in WAITING_FIELD:
@@ -423,7 +428,7 @@ def reason_phrase(state: CallState, persona: Persona) -> str:
     reason = state.value("reason")
     if not reason:
         return persona.say("reason_missing_phrase")
-    reason = reason.strip().rstrip(".!?")
+    reason = digits_to_words(reason.strip().rstrip(".!?"))  # the voice reads words, not digits ("42 Mill Lane")
     keeps_capital = len(reason) > 1 and ((reason[0].isupper() and reason[1].isupper())  # "CO alarm"
                                          or re.match(r"I(['’ ]|$)", reason))             # "I'm ringing about ..."
     return reason if keeps_capital else reason[0].lower() + reason[1:]

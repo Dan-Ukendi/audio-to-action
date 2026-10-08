@@ -36,7 +36,7 @@ import asks  # noqa: E402
 from shared.llm import LLMFormError, structured_chat  # noqa: E402
 from shared.retry import is_transient  # noqa: E402
 from shared.schemas import normalize_uk_number  # noqa: E402
-from spoken import digit_runs, letter_runs  # noqa: E402
+from spoken import digit_runs, letter_runs, without_number  # noqa: E402
 
 PROMPT_VERSION = "t1"  # bump when the prompt changes (never edit a version in place: saved calls record it)
 MAX_REASON_WORDS = 14
@@ -227,9 +227,8 @@ def fallback_reason(text: str) -> str | None:
     Grounded by construction (it IS the speech), so nothing is invented; it just reads less neatly in the read-back.
     """
     for sentence in re.split(r"(?<=[.?!])\s+", text.strip()):
-        sentence = GREETING_PREFIX.sub("", sentence).strip(" ,.!?")
-        has_number = bool(digit_runs(sentence, min_len=6))
-        if len(words_of(sentence)) >= 3 and not (has_number and len(sentence.split()) <= 10) and not INTRODUCTION.match(sentence):
+        sentence = without_number(GREETING_PREFIX.sub("", sentence).strip(" ,.!?"))  # a reason never carries the phone number
+        if len(words_of(sentence)) >= 3 and not INTRODUCTION.match(sentence):
             words = sentence.split()[:MAX_REASON_WORDS]
             while len(words) > 3 and words[-1].lower().strip(",") in TRAILING_FILLER:
                 words.pop()  # do not end on "and we" / "the" when the sentence was cut
@@ -248,6 +247,10 @@ def ground(turn: CallerTurn, text: str) -> tuple[CallerTurn, list[str]]:
     if out.name is not None and not name_is_grounded(out.name, text):
         notes.append(f"name {out.name!r} is not in what was said: dropped")
         out.name = None
+    if out.reason is not None and digit_runs(out.reason, min_len=6):
+        cut = without_number(out.reason)
+        notes.append("reason carried a phone number: cut off")
+        out.reason = cut if len(words_of(cut)) >= 2 else None
     if out.reason is not None and not reason_is_grounded(out.reason, text):
         replacement = fallback_reason(text)
         notes.append(f"reason {out.reason!r} is not in what was said: " + (f"replaced by the caller's own words" if replacement else "dropped"))

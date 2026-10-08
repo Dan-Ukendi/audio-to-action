@@ -280,3 +280,11 @@ def test_the_urgent_hook_runs_before_the_reply_is_spoken():
 
     run("c03", channel=Channel(), on_urgent=lambda state: events.append(("push", state.turns)))
     assert events.index(("push", 1)) < events.index(("speak", 1))
+
+
+def test_nothing_that_is_said_contains_a_digit_and_an_urgent_call_never_ends_as_spam(records):
+    """Invariants over all 24 calls: the voice reads words, and an emergency is never hung up on."""
+    for prefix, r in records.items():
+        assert not any(ch.isdigit() for t in r.turns for ch in t["reply"]), prefix
+        if r.message["urgent"]:
+            assert r.outcome != "spam" and "nine nine nine" in r.turns[-1]["reply"], prefix
