@@ -7,6 +7,7 @@ Exact slot assertions are made on dev cards only.
 
 import json
 import re
+import dataclasses
 import sys
 import wave
 from pathlib import Path
@@ -28,7 +29,7 @@ from rules_turn import rules_understand  # noqa: E402
 from spoken import digit_runs, letter_runs  # noqa: E402
 from turn import Understanding  # noqa: E402
 
-P = load_persona()
+P = dataclasses.replace(load_persona(), ask_spelling=True)  # the spelling tests; the default (off) is tested in test_dialog_flow.py
 FAQ = faq_module.load_faq()
 CARDS = {c.id.split("_")[0]: c for c in load_cards()}
 UNDERSTAND = lambda text, ctx: Understanding(rules_understand(text, ctx))  # noqa: E731
@@ -242,7 +243,7 @@ def test_the_command_line_runs_cards_without_a_model_and_saves_only_on_request(t
     monkeypatch.setattr(call_module, "HERE", tmp_path)
     assert call_module.main(["--card", "c14", "--understand", "rules"]) == 0
     out = capsys.readouterr().out
-    assert "=== c14_quote_hard_name" in out and "--- outcome=completed" in out and "Siobhan Gallagher" in out
+    assert "=== c14_quote_hard_name" in out and "--- outcome=completed" in out and "spell" not in out  # spelling is off by default (persona.json ask_spelling)
     assert not (tmp_path / "calls").exists()
     assert call_module.main(["--card", "c11", "--understand", "rules", "--save"]) == 0
     assert len(list((tmp_path / "calls").glob("c11_*.json"))) == 1

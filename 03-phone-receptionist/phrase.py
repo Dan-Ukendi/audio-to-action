@@ -55,6 +55,10 @@ FILLER = set("""a an the i you we your our my me us it its is are was be been am
 about from as if or and but so then also just now well yes of course please could would can may might what where when who how
 that this there here thank thanks lovely great sorry oh dear right okay ok sure perfect wonderful understood
 absolutely got noted brilliant happy let know tell say said again help team""".split())
+# Everyday words a reworded QUESTION may use. Anything else new in a sentence must come from the caller's own words.
+ASK_WORDS = set("""take reach give share provide spell repeat hear catch missed miss once more slowly clearly bit little moment
+number name phone mobile landline call back ring contact best way details full letter first last wonderful happy glad
+whats thats youre ive ill speaking talking pleasure able assist message""".split())
 OPENERS = FILLER | set("any anything something thats im ive id ill".split())
 OTHER_ASKS = {"name", "who", "number", "spell"}  # a reworded question must not start asking for one of these unless it did before
 MAX_WORDS_FACTOR = 2.0
@@ -161,9 +165,14 @@ def check_sentence(new: str, line, said: str) -> list[str]:
         needed, have = content_words(draft), content_words(new)
         if needed and len(needed & have) / len(needed) < line.coverage:
             problems.append("it dropped information from the original (" + ", ".join(sorted(needed - have)) + "): keep every fact")
+    if info:
         novel = sorted(w for w in set(words(new)) - draft_set - FILLER if w not in NUMBER_WORDS)
         if novel:
             problems.append("it adds words that are not in the original (" + ", ".join(novel) + "): an information line must not grow new facts")
+    else:  # a question or a short statement: new words must be friendly filler, ordinary asking words, or the caller's own words
+        novel = sorted(w for w in set(words(new)) - draft_set - FILLER - ASK_WORDS - said_set if w not in NUMBER_WORDS and len(w) >= 3)
+        if novel:
+            problems.append("it adds words that neither you nor the caller said (" + ", ".join(novel) + "): do not react to things the caller did not say")
     draft_runs, new_runs = number_runs(draft, strict=info), number_runs(new, strict=info)
     if (new_runs != draft_runs) if (ordered_numbers or info) else (sorted(new_runs) != sorted(draft_runs)):
         problems.append("the numbers changed: say every number exactly as in the original, in the same order, nothing added or dropped")
@@ -200,6 +209,12 @@ def recent_turns(state, count: int = 3) -> str:
     return "\n".join(f"Caller: {text}" for text in said) or "(this is the first turn)"
 
 
+def used_openers(state, count: int = 3) -> list[str]:
+    """The first word of Holly's last few replies ("Lovely"), so the next one can start differently. Not her sentences."""
+    firsts = [entry["reply"].split()[0].strip(",.!?").lower() for entry in state.log[-count:] if entry.get("reply")]
+    return sorted(set(firsts))
+
+
 def build_messages(parts: list, state, said: str, persona) -> tuple[list[dict], list]:
     """The prompt, and the rewritable parts in the order the model must answer them. Fixed parts are not in it."""
     lines = [p for p in parts if p.rewrite]
@@ -226,8 +241,10 @@ def build_messages(parts: list, state, said: str, persona) -> tuple[list[dict], 
         "'Is there anything else I can help you with?' -> 'Is there anything else you need while I have you?'",
         'Answer as JSON: {"sentences": [one string per numbered line, in the same order]}.',
     ])
+    openers = used_openers(state)
+    avoid = ("\nDo not start with these words, you used them recently: " + ", ".join(openers) + ".") if openers else ""
     user = (f"What the caller said so far:\n{recent_turns(state)}\n\nThe caller just said: {said!r}\n\n"
-            "Lines to reword (answer with the same number of sentences):\n" + "\n".join(numbered))
+            "Lines to reword (answer with the same number of sentences):\n" + "\n".join(numbered) + avoid)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}], lines
 
 

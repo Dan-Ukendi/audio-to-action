@@ -144,6 +144,21 @@ the step and builds the approved sentence; `phrase.py` only changes how it is sa
 - Not done: the evaluation (`evaluate.py`) still measures the fixed sentences; "more natural" needs a blind side-by-side rating by the owner.
 - Rule change: "every sentence comes from persona.json / faq.json" became "every sentence is either one of them or a checked rewording of one".
 
+## 3.2 Flow fixes after the first real test call (owner feedback)
+A live call showed: a question about services was answered, then Holly asked for the NAME (the question had been copied into `reason`);
+she then asked the caller to spell the name, and "No, I don't want to" ended the call; the reply said "Oh dear, a burst pipe" although nobody
+mentioned a pipe (the model copied the example in `persona.json` `style`). Fixed:
+- A bare question ("What services do you offer?") is answered and is NOT stored as the reason; Holly then offers help or a message
+  (`offer_help` line). A question plus a request ("My boiler is leaking, how much do you charge?") still keeps the request (`dialog.bare_question`).
+- Spelling a full name is no longer asked by default (`persona.json` limits `ask_spelling: false`); the read-back is the check and the caller can
+  correct it. Cost: a hard name such as c14 "Siobhan (Shiv-awn)" is no longer fixed by spelling; set `ask_spelling` to true to bring it back.
+- A "no" / refusal to one question (spelling, name, number) refuses that detail; only a real goodbye ends a collecting call.
+- A valid UK number said aloud that the model missed is taken by plain code (it used to be asked for three times).
+- Wording: the example reaction was removed from the style text, and a reworded question may only use words from the line, ordinary asking
+  words, or the caller's own words (so an invented "burst pipe" is rejected); Holly is told which opening word she used recently.
+- Models are loaded in the background when a call starts (the first turn took 20-45 s because Whisper and the LLM loaded on demand).
+- Still slow: about 6-8 s per turn with natural wording (understanding + wording are two model calls). "Fixed" wording is faster.
+
 ## 4. Pre-registered decision rules (written before any model run)
 
 **A vs B (Phase 6).** Same understanding step, same cards (`score` split), temperature 0. Version B replaces version A as the

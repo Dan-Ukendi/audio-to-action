@@ -37,6 +37,7 @@ REQUIRED_LINES: dict[str, set[str]] = {
     "correction": set(),
     "faq_unknown": set(),
     "anything_else": set(),
+    "offer_help": set(),
     "urgent_ack": set(),
     "goodbye": set(),
     "goodbye_urgent": set(),
@@ -68,6 +69,7 @@ class Persona:
     max_reasks: int
     max_silent_turns: int
     lines: dict[str, str]
+    ask_spelling: bool = True  # ask a caller with a full name to spell it (off: the read-back is the check, the caller can correct)
     style: str = ""  # how Holly sounds when her sentences are reworded (phrase.py); the fixed lines stay the fallback
 
     def say(self, key: str, **values: str) -> str:
@@ -132,7 +134,7 @@ def load_persona(path: str | Path = DEFAULT_PERSONA) -> Persona:
     return Persona(
         business=data["business"], receptionist=data["receptionist"], speaker=speaker, taken_voice_ids=taken, part_voice_ids=part_ids,
         hint=hint, detail_order=order, max_turns=limits["max_turns"], max_reasks=limits["max_reasks_per_detail"],
-        max_silent_turns=limits["max_silent_turns"], lines=dict(lines), style=data.get("style", ""),
+        max_silent_turns=limits["max_silent_turns"], lines=dict(lines), style=data.get("style", ""), ask_spelling=limits.get("ask_spelling", True),
     )
 
 

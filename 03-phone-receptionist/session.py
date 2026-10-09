@@ -76,6 +76,27 @@ class AudioSession:
         return median([t.timing.total_s for t in self.turns if t.timing])
 
 
+def warm_up(whisper_model: str | None = None, llm_keep_alive: str = "30m") -> None:
+    """Load Whisper and the language model into memory BEFORE the first turn.
+
+    The first turn of a call used to take 20-45 s because both models were loaded on demand (the caller waited). Called in
+    a background thread when a call starts; every failure is ignored (the first turn is then just as slow as before)."""
+    try:
+        from shared import transcribe as tr
+        cfg = tr.settings()
+        tr.load_model(whisper_model or cfg["model"], cfg["device"], cfg["compute_type"], cfg["cpu_threads"])
+    except Exception:
+        pass
+    try:
+        import ollama
+        from shared import llm
+        c = llm.settings()
+        ollama.Client(host=c["host"], timeout=60).chat(model=c["model"], messages=[{"role": "user", "content": "hi"}],
+                                                     keep_alive=llm_keep_alive, options={"num_predict": 1})
+    except Exception:
+        pass
+
+
 def scripted_responder(persona: Persona):
     """Phase 2 stand-in for the dialog: cycles through fixed persona lines, ignoring what was said."""
     lines = [persona.say("ask_reason"), persona.say("ask_name"), persona.say("ask_number"), persona.say("anything_else")]

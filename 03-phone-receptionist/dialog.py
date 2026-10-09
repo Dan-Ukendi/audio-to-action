@@ -72,6 +72,26 @@ MAX_UNCLEAR_CLOSINGS = 2  # how often "anything else?" is repeated when the answ
 MAX_EXTRA_REQUESTS = 3    # requests added after the message was complete; more would be a second call
 
 
+GREETING_WORDS = {"hi", "hello", "hey", "there", "good", "morning", "afternoon", "evening", "sorry", "excuse", "me", "so", "um", "uh", "yes", "yeah"}
+
+
+QUESTION_STARTS = {"what", "whats", "what's", "how", "do", "does", "did", "can", "could", "is", "are", "when", "where", "who", "which",
+                   "will", "would", "should", "have", "has", "why", "may", "any", "and", "also"}
+
+
+def bare_question(text: str) -> bool:
+    """Only questions (plus a greeting): nothing in it states what the caller needs done. Judged clause by clause, so
+    "My boiler is leaking, how much do you charge?" is NOT bare: its first clause is a request."""
+    clauses = [c.strip() for c in re.split(r"[.!?,;]+", text.lower()) if c.strip()]
+    statement_words = []
+    for clause in clauses:
+        words = re.findall(r"[a-z']+", clause)
+        if words and words[0] in QUESTION_STARTS:
+            continue
+        statement_words += [w for w in words if w not in GREETING_WORDS]
+    return bool(clauses) and not statement_words
+
+
 # ---------------------------------------------------------------- the state of one call
 
 class Slot(BaseModel):
@@ -204,10 +224,27 @@ def apply_turn(state: CallState, text: str, understanding: Understanding, person
         state.safety_advised += facts.advice_kinds
 
     waiting = state.waiting_for
+    # The model sometimes returns no number for "oh seven seven double oh, nine hundred, ..." although the caller said one
+    # (seen in live calls: the number was asked for three times). Digits said aloud are plain-code territory: take a valid
+    # UK number from the words ourselves when the model missed it and we are waiting for one.
+    if turn.number is None and (waiting in (asks.NUMBER, asks.NUMBER_AGAIN) or state.value("number") is None):
+        for run in digit_runs(text, min_len=10):
+            try:
+                found = normalize_uk_number(run)
+            except ValueError:
+                continue
+            if found:
+                turn = turn.model_copy(update={"number": found})
+                facts.notes.append("number taken from the caller's words by plain code (the model missed it)")
+                break
     # "Yeah no, that's wrong" and "Right, no, the name's wrong" start like a yes but are a no.
     facts.no = bool(NO.match(text)) or turn.is_correction or (len(text.split()) <= 10 and bool(LATE_NO.search(text)))
     facts.yes = bool(YES.match(text)) and not facts.no
     facts.wants_to_end = turn.wants_to_end or ends_call(text)
+    # "No, I don't want to" to ONE question (spelling, name, number) refuses that detail, it does not end the call.
+    if (waiting in WAITING_FIELD and (facts.no or REFUSED_NAME.search(text) or REFUSED_NUMBER.search(text))
+            and not ends_call(text)):
+        facts.wants_to_end = False
     facts.asks_repeat = bool(REPEAT_REQUEST.search(text)) and len(text.split()) <= 8
 
     # --- which details this turn may touch. A correction changes only what it names ("correction flow for that field only").
@@ -303,6 +340,11 @@ def apply_turn(state: CallState, text: str, understanding: Understanding, person
     if result.unknown and not vetoed and not answered_by_advice and not facts.asks_repeat:
         facts.unknown_question = result.unknown
         state.unanswered_questions.append(result.unknown)
+    # A bare question ("What services do you offer?") is not the reason for the call: the model often copies it into
+    # `reason`, which made Holly skip "what can I help you with?" and ask for the name straight away.
+    if facts.faq_ids and "reason" in facts.changed and waiting in (asks.GREETING, asks.REASON) and bare_question(text):
+        state.slots["reason"].value, state.slots["reason"].given_up = None, False
+        facts.changed.remove("reason")
     return facts
 
 
@@ -322,7 +364,7 @@ def next_missing(state: CallState, persona: Persona) -> str | None:
                 slot.given_up = True
                 continue
             return detail
-        if detail == "name" and not slot.spelled and not state.spelling_asked and not state.urgent and len(slot.value.split()) >= 2:
+        if detail == "name" and persona.ask_spelling and not slot.spelled and not state.spelling_asked and not state.urgent and len(slot.value.split()) >= 2:
             return "spelling"
     return None
 
@@ -408,7 +450,7 @@ def decide_a(state: CallState, facts: Facts, persona: Persona) -> list[Action]:
     only_questions = (here == GREETING and facts.faq_ids and not facts.unknown_question
                       and state.value("reason") is None and not facts.changed)
     if only_questions:  # decision 16: someone who only wants information is not pressed for a message
-        return actions + [Action(kind="anything_else")]
+        return actions + [Action(kind="anything_else", arg="offer")]  # "can I help with something, or take a message?"
     return actions + collect(state, facts, persona)
 
 
@@ -511,6 +553,8 @@ def render_parts(actions: list[Action], state: CallState, persona: Persona, faq:
                               keep_end=(reason_phrase(state, persona),), kind=a.kind))
         elif a.kind in ("ask_correction", "confirmed", "anything_else", "what_else"):
             line = {"ask_correction": "correction"}.get(a.kind, a.kind)
+            if a.kind == "anything_else" and a.arg == "offer":
+                line = "offer_help"  # after the first question was answered, before any message: offer help or a message
             parts.append(Part(persona.say(line), rewrite=True, mention=SAY_MENTION.get(a.kind, ()), kind=a.kind))
         elif a.kind == "goodbye":
             line = {"urgent": "goodbye_urgent", "spam": "goodbye_spam", "info": "goodbye_info"}.get(a.arg, "goodbye")

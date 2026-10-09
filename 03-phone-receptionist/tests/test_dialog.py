@@ -2,6 +2,7 @@
 
 import json
 import re
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -19,7 +20,7 @@ from dialog import CallState, next_reply, start_call  # noqa: E402
 from persona import load_persona, speak_number  # noqa: E402
 from turn import CallerTurn, Understanding  # noqa: E402
 
-P = load_persona()
+P = dataclasses.replace(load_persona(), ask_spelling=True)  # the spelling tests; the default (off) is tested in test_dialog_flow.py
 FAQ = faq_module.load_faq()
 NUMBER = "01632960501"
 
@@ -407,7 +408,7 @@ def test_an_unknown_question_is_passed_on_and_kept_in_the_message():
 def test_someone_who_only_asks_a_question_is_not_pressed_for_a_message():
     s = new()
     reply, s = say(s, "What are your opening hours?")
-    assert reply == f"{FAQ['hours'].answer} {line('anything_else')}" and s.state == "GOODBYE"
+    assert reply == f"{FAQ['hours'].answer} {line('offer_help')}" and s.state == "GOODBYE"
     reply, s = say(s, "No thanks, that's all.", wants_to_end=True)
     assert reply == line("goodbye_info") and s.outcome == "info_only" and all(v.value is None for v in s.slots.values())
 

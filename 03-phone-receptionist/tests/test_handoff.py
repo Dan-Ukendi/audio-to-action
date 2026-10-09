@@ -1,6 +1,7 @@
 """A finished call becomes a row in Part 1's voicemails.db: caller-side transcript, analysis, routing, push, storage."""
 
 import json
+import dataclasses
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +25,7 @@ from shared.llm import LLMFormError, StructuredReply  # noqa: E402
 from shared.schemas import Analysis, Result  # noqa: E402
 from turn import Understanding  # noqa: E402
 
-P = load_persona()
+P = dataclasses.replace(load_persona(), ask_spelling=True)  # the spelling tests; the default (off) is tested in test_dialog_flow.py
 FAQ = faq_module.load_faq()
 CARDS = {c.id.split("_")[0]: c for c in load_cards()}
 UNDERSTAND = lambda text, ctx: Understanding(rules_understand(text, ctx))  # noqa: E731

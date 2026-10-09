@@ -16,6 +16,7 @@ instead of the sidebar and leaves the page title and config to the host.
 
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 import streamlit as st
@@ -26,7 +27,7 @@ sys.path.insert(0, str(HERE.parent))
 
 from persona import PersonaError, load_persona, speaker_id  # noqa: E402
 from faq import load_faq  # noqa: E402
-from session import AudioSession, dialog_responder  # noqa: E402
+from session import AudioSession, dialog_responder, warm_up  # noqa: E402
 
 WHISPER_CHOICES = ["base", "small"]
 
@@ -60,6 +61,7 @@ def start_call(persona, model: str, speaker: int | None, understanding: str, dec
     responder = dialog_responder(persona, load_faq(), make_understand(understanding), make_decide(decision), make_phrase(wording))
     session = AudioSession(responder, Path(tempfile.mkdtemp(prefix="call_")), hint=persona.hint, speaker=speaker, model=model)
     session.responder = responder
+    threading.Thread(target=warm_up, args=(model,), daemon=True).start()  # models load while the greeting plays
     session.greet(responder.greeting)
     st.session_state["play_turn"] = 0
     return session
