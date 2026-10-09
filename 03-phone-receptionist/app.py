@@ -9,6 +9,9 @@ without a voice the page still shows what was heard, as text).
 The replies come from the real dialog (version A, the state machine, or B, the agent). The sidebar shows what the receptionist
 has understood so far and the median wait for an answer. A finished call is not handed to Part 1 from this page: use
 call.py / handoff.py for that.
+
+The same page also runs as a tab of the local app (app/app.py): render(embedded=True) puts the settings in the tab
+instead of the sidebar and leaves the page title and config to the host.
 """
 
 import sys
@@ -72,38 +75,44 @@ def show_turns(session: AudioSession) -> None:
     st.session_state["play_turn"] = None
 
 
-def side_panel(state) -> None:
+def side_panel(state, ui) -> None:
     """What the receptionist has understood so far (only what the caller said)."""
-    st.sidebar.subheader("Understood so far")
+    ui.subheader("Understood so far")
     for detail in ("reason", "name", "number"):
-        st.sidebar.write(f"**{detail}:** {state.value(detail) or '-'}")
-    st.sidebar.write(f"**urgent:** {'yes' if state.urgent else 'no'}")
+        ui.write(f"**{detail}:** {state.value(detail) or '-'}")
+    ui.write(f"**urgent:** {'yes' if state.urgent else 'no'}")
 
 
-def main() -> None:
-    st.set_page_config(page_title="Receptionist", page_icon="☎")
-    st.title("Receptionist: push-to-talk")
+def render(embedded: bool = False) -> None:
+    """The whole page. embedded=True: inside a tab of the local app (settings in an expander, no title/config)."""
+    if embedded:
+        st.subheader("Receptionist: push-to-talk")
+        ui = st.expander("Settings and what Holly has understood", expanded=True)
+    else:
+        st.set_page_config(page_title="Receptionist", page_icon="☎")
+        st.title("Receptionist: push-to-talk")
+        ui = st.sidebar
     persona = load_persona()
-    model = st.sidebar.selectbox("Whisper model", WHISPER_CHOICES, index=1)
+    model = ui.selectbox("Whisper model", WHISPER_CHOICES, index=1)
     try:
         speaker = speaker_id(persona)
     except PersonaError as problem:
         speaker = None
         st.warning(f"No receptionist voice yet, replies are shown as text only. {problem}")
-    understanding = st.sidebar.selectbox("Understanding", ["model", "rules"], help="model needs Ollama; rules is the no-model baseline")
-    decision = st.sidebar.selectbox("Decision", ["A (state machine)", "B (agent)"])
+    understanding = ui.selectbox("Understanding", ["model", "rules"], help="model needs Ollama; rules is the no-model baseline")
+    decision = ui.selectbox("Decision", ["A (state machine)", "B (agent)"])
 
     if st.button("Start a call"):
-        st.session_state["session"] = start_call(persona, model, speaker, understanding, decision)
+        st.session_state["call_session"] = start_call(persona, model, speaker, understanding, decision)
         st.session_state["mic"] = 0
-    session: AudioSession | None = st.session_state.get("session")
+    session: AudioSession | None = st.session_state.get("call_session")
     if session is None:
         st.info("Press 'Start a call', then hold the microphone button while you speak.")
         return
 
     show_turns(session)
     state = session.responder.state
-    side_panel(state)
+    side_panel(state, ui)
     if state.state == "ENDED":
         st.success(f"The call has ended ({state.outcome}). Press 'Start a call' for a new one.")
         return
@@ -116,9 +125,10 @@ def main() -> None:
         st.rerun()
     median = session.median_total_s()
     if median is not None:
-        st.sidebar.metric("Median wait for an answer", f"{median:.1f} s", help="Target: 5 s or less")
+        ui.metric("Median wait for an answer", f"{median:.1f} s", help="Target: 5 s or less")
         if not session.speaker:
-            st.sidebar.caption("No voice chosen: the speaking step is missing, so this understates the real wait.")
+            ui.caption("No voice chosen: the speaking step is missing, so this understates the real wait.")
 
 
-main()
+if __name__ == "__main__":  # `streamlit run` executes the script as __main__; the local app imports render() instead
+    render()

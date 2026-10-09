@@ -40,4 +40,14 @@ def test_app_renders_without_errors():
     from streamlit.testing.v1 import AppTest
     at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py")).run(timeout=60)
     assert not at.exception, at.exception
-    assert [t.label for t in at.tabs][:3] == ["📞 Voicemails", "🗓️ Meetings", "❓ How it works"]
+    assert [t.label for t in at.tabs][:4] == ["📞 Voicemails", "🗓️ Meetings", "☎ Receptionist", "❓ How it works"]
+
+
+def test_receptionist_tab_starts_a_call_inside_the_app(monkeypatch):
+    from streamlit.testing.v1 import AppTest
+    monkeypatch.delenv("RECEPTIONIST_SPEAKER", raising=False)
+    at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=60).run()
+    start = next(b for b in at.button if b.label == "Start a call")
+    start.click().run()
+    assert not at.exception, at.exception
+    assert "This is Holly, the automated assistant" in " ".join(e.value for e in at.markdown)

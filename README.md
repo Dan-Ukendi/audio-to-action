@@ -59,10 +59,13 @@ http://localhost:8501, reachable only from this computer.
 - **Meetings** tab: drop recordings (pick the meeting date if the file name has none) → choose *agent* or
   *rules* → *Process the inbox* → the task tracker, the items found in each meeting, every tracker change
   with its reason, and the agent's steps.
+- **Receptionist** tab (Part 3): press the microphone, speak, and Holly answers (version A state machine or B
+  agent; model or rules understanding). Rehearsal only: calls are not saved. Replies show as text until a voice
+  is chosen (`choose_voice.py`).
 - Runs happen in the background with a live log; failed files show the step and error, with *Retry failed*.
 - The sidebar warns if ffmpeg or Ollama is missing, or if there's too little free memory (~6 GB needed).
 The app uses the same inbox folders, databases and `run.py` scripts as the command line. Its code is in `app/`
-(`helpers.py` = the logic, `app.py` = the page). Tests: `python -m pytest app	ests`.
+(`helpers.py` = the logic, `app.py` = the page). Tests: `python -m pytest app/tests`.
 
 ## Setup (Windows / PowerShell)
 Needs Python 3.13, [ffmpeg](https://ffmpeg.org) on PATH and [Ollama](https://ollama.com).

@@ -13,6 +13,7 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+RECEPTIONIST_DIR = Path(__file__).resolve().parent.parent / "03-phone-receptionist"
 
 import helpers as h  # noqa: E402
 
@@ -229,6 +230,20 @@ def meeting_details(m: dict) -> None:
         st.audio(str(audio))
 
 
+# ---------------------------------------------------------------- receptionist (Part 3)
+
+def receptionist_tab() -> None:
+    """Part 3's push-to-talk page, unchanged, shown here. Imported late: it loads the dialog and audio code."""
+    st.caption("Part 3: talk to Holly with the microphone. Calls here are a rehearsal: they are not saved to the "
+               "voicemail list (use `call.py --save` for that).")
+    sys.path.insert(0, str(RECEPTIONIST_DIR))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("receptionist_page", RECEPTIONIST_DIR / "app.py")
+    page = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(page)
+    page.render(embedded=True)
+
+
 # ---------------------------------------------------------------- how it works
 
 def help_tab() -> None:
@@ -242,6 +257,10 @@ never archives "smell of gas", "burst", "sparking" and similar.
 as a hint, the LLM extracts action items (task, owner, due date, status, quote), and the task tracker is updated
 either by a bounded LLM agent or by plain rules. Every tracker change is stored with its reason.
 
+**Receptionist** (Part 3, a state machine): you speak into the microphone, Whisper writes what you said, the LLM
+fills a small form per turn, plain code checks it and decides what Holly says next. Every sentence she says is
+fixed text; the model never writes a reply. There is no voice chosen yet, so her answers show as text.
+
 **Re-adding the same audio does nothing**: files are recognised by their content, not their name.
 If something fails, the file goes to *failed* with the reason; fix it and press **Retry failed**.
 
@@ -253,10 +272,12 @@ Details: `README.md`, `docs/learning-log.md`.
 # ---------------------------------------------------------------- page
 
 sidebar()
-voicemail_tab, meeting_tab, how_tab = st.tabs(["📞 Voicemails", "🗓️ Meetings", "❓ How it works"])
+voicemail_tab, meeting_tab, call_tab, how_tab = st.tabs(["📞 Voicemails", "🗓️ Meetings", "☎ Receptionist", "❓ How it works"])
 with voicemail_tab:
     voicemails_tab()
 with meeting_tab:
     meetings_tab()
+with call_tab:
+    receptionist_tab()
 with how_tab:
     help_tab()
