@@ -33,6 +33,21 @@ from shared.schemas import Segment, Transcript
 load_dotenv()  # reads .env if present; the defaults below apply otherwise
 
 
+def _add_cuda_libraries() -> None:
+    """Windows only: make the CUDA DLLs from the pip packages nvidia-cublas-cu12 / nvidia-cudnn-cu12 findable.
+    Without this, Whisper on the GPU fails with 'cublas64_12.dll is not found'. Harmless if they are not installed."""
+    if not hasattr(os, "add_dll_directory"):
+        return
+    import site
+    for root in site.getsitepackages():
+        for folder in (Path(root) / "nvidia").glob("*/bin"):
+            os.add_dll_directory(str(folder))
+            os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
+
+
+_add_cuda_libraries()
+
+
 def settings() -> dict:
     """Whisper settings from .env, so switching model needs no code change."""
     return {

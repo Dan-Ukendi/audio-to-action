@@ -44,7 +44,8 @@ def sidebar() -> None:
     if st.sidebar.button("Check again"):
         environment_problems.clear()
         st.rerun()
-    st.sidebar.info("On this laptop's CPU (GPU off) a voicemail takes ~1-3 min and a meeting ~5-20 min. "
+    st.sidebar.info("Both the language model (Ollama) and Whisper run on the GPU when it is available "
+                    "(set WHISPER_DEVICE=cuda and WHISPER_COMPUTE_TYPE=float16 in .env; the CPU is the fallback). "
                     "Runs continue in the background; you can keep using the page.")
 
 
