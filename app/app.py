@@ -65,6 +65,17 @@ def add_files(part: h.Part, label: str, meeting_day: date | None = None) -> None
         st.caption("Waiting in the inbox: " + ", ".join(p.name for p in waiting))
 
 
+def record_voicemail(part: h.Part) -> None:
+    """Record with the browser microphone and put the clip in the inbox like any uploaded file."""
+    n = st.session_state.get("recordings", 0)
+    clip = st.audio_input("Or record a voicemail now: press, speak, press again", key=f"recording_{n}")
+    if clip is not None and st.button("Add this recording to the inbox", key="add_recording", type="primary"):
+        saved = h.save_upload(clip.getvalue(), h.recording_name(), part.inbox)
+        st.toast(f"Added {saved.name}")
+        st.session_state["recordings"] = n + 1  # a new, empty microphone widget
+        st.rerun()
+
+
 def run_controls(part: h.Part, extra_args: list[str] | None = None) -> None:
     """Start / retry buttons and the live log of the latest run."""
     log = h.latest_run(part)
@@ -115,6 +126,7 @@ ROUTE_LABEL = {"notify_now": "🚨 urgent (push)", "inbox": "📥 call back", "p
 def voicemails_tab() -> None:
     st.subheader("1 · Add voicemails")
     add_files(h.VOICEMAILS, "Drop voicemail audio files here")
+    record_voicemail(h.VOICEMAILS)
 
     st.subheader("2 · Run the pipeline")
     st.caption("transcribe → analyze (LLM fills a form, checked by code) → route (plain rules) → push + save")

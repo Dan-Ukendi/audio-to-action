@@ -81,6 +81,11 @@ def save_upload(data: bytes, name: str, inbox: Path) -> Path:
     return target
 
 
+def recording_name() -> str:
+    """File name for a clip recorded in the browser (the browser gives it none): recording_<date>_<time>.wav."""
+    return f"recording_{datetime.now():%Y-%m-%d_%H%M%S}.wav"
+
+
 def files_in(folder: Path) -> list[Path]:
     """Audio files in a folder, newest first."""
     if not folder.exists():

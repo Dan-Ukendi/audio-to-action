@@ -51,3 +51,9 @@ def test_receptionist_tab_starts_a_call_inside_the_app(monkeypatch):
     start.click().run()
     assert not at.exception, at.exception
     assert "This is Holly, the automated assistant" in " ".join(e.value for e in at.markdown)
+
+
+def test_recorded_clip_lands_in_the_inbox_as_wav(tmp_path):
+    name = h.recording_name()
+    assert name.startswith("recording_") and name.endswith(".wav")
+    assert h.save_upload(b"RIFF", name, tmp_path).parent == tmp_path

@@ -54,7 +54,7 @@ five meetings; on perfect input the rules won (14/14 vs 11/14). Details: [02-mee
 ## Local app (add audio, run, see results)
 Double-click **`start_app.bat`** (or run `python -m streamlit run apppp.py`): a page opens at
 http://localhost:8501, reachable only from this computer.
-- **Voicemails** tab: drop audio files → *Process the inbox* → a table of results (route, category, caller,
+- **Voicemails** tab: drop audio files, or record one with the microphone → *Process the inbox* → a table of results (route, category, caller,
   number, summary, review flags); click a row for the transcript, the reasons for the route and the audio.
 - **Meetings** tab: drop recordings (pick the meeting date if the file name has none) → choose *agent* or
   *rules* → *Process the inbox* → the task tracker, the items found in each meeting, every tracker change
