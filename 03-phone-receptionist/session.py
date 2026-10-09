@@ -91,13 +91,14 @@ def scripted_responder(persona: Persona):
     return respond
 
 
-def dialog_responder(persona: Persona, faq, understand_fn, decide_fn=dialog.decide_a):
+def dialog_responder(persona: Persona, faq, understand_fn, decide_fn=dialog.decide_a, phrase_fn=None):
     """The real receptionist behind the page. `respond.state` is the call state (for the page's side panel)."""
     greeting, state = dialog.start_call(persona)
 
     def respond(text: str, heard: Heard) -> str:
         # A turn Whisper ignored (silence, noise) reaches the dialog as silence: it asks again, and ends after two in a row.
-        reply, _ = dialog.next_reply(state, "" if heard.ignored else text, persona, faq, understand_fn, decide_fn, heard=heard)
+        reply, _ = dialog.next_reply(state, "" if heard.ignored else text, persona, faq, understand_fn, decide_fn, heard=heard,
+                                       phrase_fn=phrase_fn)
         return reply
 
     respond.state, respond.greeting = state, greeting

@@ -132,7 +132,7 @@ Choices (owner, 2026-10-07/08):
 - Order: **state machine first** (version A, plain code); a tool-calling agent (version B) afterwards as a measured experiment.
 - Persona: "Holly", the automated assistant of Brightwater Plumbing & Heating; she says she is automated and that the call is recorded.
 - Extra rules for Part 3: the dialog engine is UI-independent pure Python; every sentence she says comes from `persona.json`
-  or `faq.json` (a model never writes what is said); call audio, records and logs are git-ignored.
+  or `faq.json`, or is a model rewording of one that passed the code checks in `phrase.py` (a model never decides what is said and never touches safety lines); call audio, records and logs are git-ignored.
 
 Git rule (absolute, every commit, branch and PR): the only author and committer is **Dan-Ukendi <dan.ukendi1@gmail.com>**.
 No co-author lines, no "generated with" lines, no mention of any AI tool or vendor in commits, PR texts or committed files.

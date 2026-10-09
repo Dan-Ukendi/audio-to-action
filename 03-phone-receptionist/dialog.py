@@ -24,6 +24,7 @@ simulated-caller tests run with no screen, microphone or model.
 import re
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -447,50 +448,85 @@ def read_back_text(state: CallState, persona: Persona) -> str:
     return persona.say("read_back_no_name_no_number", reason=reason)
 
 
-def render(actions: list[Action], state: CallState, persona: Persona, faq: dict[str, FaqEntry]) -> str:
-    """Every action becomes a fixed sentence: nothing here is written by a model."""
+@dataclass
+class Part:
+    """One sentence of the reply with what the optional natural-wording step (phrase.py) may do to it."""
+    text: str
+    rewrite: bool = False            # False = said word for word (safety lines, urgent promises, the spam goodbye)
+    keep: tuple[str, ...] = ()       # names / reasons that must survive a rewrite
+    ordered_numbers: bool = False    # a read-back: the digits must come out in the same order
+    keep_end: tuple[str, ...] = ()   # items of `keep` that must end their phrase (the reason in a read-back: nothing may be added after it)
+    mention: tuple[str, ...] = ()    # a rewording of a question must contain one of these words (it still asks the SAME thing)
+    coverage: float = 0.0            # share of the sentence's content words that must survive (information lines)
+    kind: str = ""
+
+
+# The word a reworded question must still contain, so "what is your number?" cannot turn into "what is your name?".
+ASK_MENTION = {"reason": ("about", "help", "calling", "call", "reason", "what"), "name": ("name", "who"),
+               "number": ("number",), "number_again": ("number",), "spelling": ("spell",)}
+SAY_MENTION = {"confirmed": ("thank", "thanks", "got", "noted", "down"), "anything_else": ("anything", "else", "more"), "what_else": ("else", "more", "what"),
+               "ask_correction": ("change", "name", "number")}
+LINE_MENTION = {"ask_reason": ASK_MENTION["reason"], "ask_name": ASK_MENTION["name"], "ask_number": ASK_MENTION["number"],
+                "number_refused": ASK_MENTION["number"], "correction": SAY_MENTION["ask_correction"],
+                "anything_else": SAY_MENTION["anything_else"]}
+FIXED_KINDS = {"urgent_ack", "advice", "silence_end", "turn_limit"}  # safety behaviour: never reworded
+
+
+def render_parts(actions: list[Action], state: CallState, persona: Persona, faq: dict[str, FaqEntry]) -> list[Part]:
+    """Every action becomes a fixed sentence: nothing here is written by a model. Each sentence is marked
+    rewritable or not, for phrase.py; with no phrasing step the parts are simply joined (render)."""
     parts = []
+    name_keep = tuple(v for v in (state.value("name"),) if v)
     for a in actions:
         if a.kind == "urgent_ack":
-            parts.append(persona.say("urgent_ack"))
+            parts.append(Part(persona.say("urgent_ack"), kind=a.kind))
         elif a.kind == "advice":
-            parts.append(faq[f"safety_{a.arg}"].answer)
+            parts.append(Part(faq[f"safety_{a.arg}"].answer, kind=a.kind))
         elif a.kind == "faq":
-            parts.append(faq[a.arg].answer)
+            parts.append(Part(faq[a.arg].answer, rewrite=True, coverage=0.85, kind=a.kind))
         elif a.kind == "faq_unknown":
-            parts.append(persona.say("faq_unknown"))
+            parts.append(Part(persona.say("faq_unknown"), rewrite=True, coverage=0.6, kind=a.kind))
         elif a.kind == "ask" and a.arg == "spelling":
-            parts.append(persona.say("ask_name_spelling", first_name=first_name(state.value("name") or "")))
+            first = first_name(state.value("name") or "")
+            parts.append(Part(persona.say("ask_name_spelling", first_name=first), rewrite=True, keep=(first,) if first else (), mention=("spell",), kind=a.kind))
         elif a.kind == "ask":
-            parts.append(persona.say(ASK_LINE[a.arg]))
+            parts.append(Part(persona.say(ASK_LINE[a.arg]), rewrite=True, mention=ASK_MENTION[a.arg], kind=a.kind))
         elif a.kind == "repeat_request":
-            parts.append(persona.say("repeat_request"))
+            parts.append(Part(persona.say("repeat_request"), rewrite=True, kind=a.kind))  # kind: phrase.py forbids asking for a detail
         elif a.kind == "repeat_last":
             if state.waiting_for == asks.CONFIRM:
-                parts.append(read_back_text(state, persona))
+                parts.append(Part(read_back_text(state, persona), rewrite=True, ordered_numbers=True,
+                                  keep=name_keep + (reason_phrase(state, persona),),
+                                  keep_end=(reason_phrase(state, persona),), kind=a.kind))
             elif state.waiting_for == asks.SPELLING:
-                parts.append(persona.say("ask_name_spelling", first_name=first_name(state.value("name") or "")))
+                first = first_name(state.value("name") or "")
+                parts.append(Part(persona.say("ask_name_spelling", first_name=first), rewrite=True, keep=(first,) if first else (),
+                                  mention=("spell",), kind=a.kind))
             else:
-                parts.append(persona.say(REPEAT_LINE.get(state.waiting_for, "ask_reason")))
+                line = REPEAT_LINE.get(state.waiting_for, "ask_reason")
+                parts.append(Part(persona.say(line), rewrite=True, mention=LINE_MENTION.get(line, ()), kind=a.kind))
         elif a.kind == "read_back":
-            parts.append(read_back_text(state, persona))
-        elif a.kind == "ask_correction":
-            parts.append(persona.say("correction"))
-        elif a.kind == "confirmed":
-            parts.append(persona.say("confirmed"))
-        elif a.kind == "anything_else":
-            parts.append(persona.say("anything_else"))
-        elif a.kind == "what_else":
-            parts.append(persona.say("what_else"))
+            parts.append(Part(read_back_text(state, persona), rewrite=True, ordered_numbers=True,
+                              keep=name_keep + (reason_phrase(state, persona),),
+                              keep_end=(reason_phrase(state, persona),), kind=a.kind))
+        elif a.kind in ("ask_correction", "confirmed", "anything_else", "what_else"):
+            line = {"ask_correction": "correction"}.get(a.kind, a.kind)
+            parts.append(Part(persona.say(line), rewrite=True, mention=SAY_MENTION.get(a.kind, ()), kind=a.kind))
         elif a.kind == "goodbye":
-            parts.append(persona.say({"urgent": "goodbye_urgent", "spam": "goodbye_spam", "info": "goodbye_info"}.get(a.arg, "goodbye")))
+            line = {"urgent": "goodbye_urgent", "spam": "goodbye_spam", "info": "goodbye_info"}.get(a.arg, "goodbye")
+            # the urgent goodbye carries the callback promise and "nine nine nine": never reworded
+            parts.append(Part(persona.say(line), rewrite=a.arg not in ("urgent", "spam"), coverage=0.75, kind=a.kind))
         elif a.kind == "silence_end":
-            parts.append(persona.say("silence_end_urgent" if a.arg == "urgent" else "silence_end"))
+            parts.append(Part(persona.say("silence_end_urgent" if a.arg == "urgent" else "silence_end"), kind=a.kind))
         elif a.kind == "turn_limit":
-            parts.append(persona.say("turn_limit_urgent" if a.arg == "urgent" else "turn_limit"))
+            parts.append(Part(persona.say("turn_limit_urgent" if a.arg == "urgent" else "turn_limit"), kind=a.kind))
         else:
             raise ValueError(f"unknown action {a.kind!r}")
-    return " ".join(parts)
+    return parts
+
+
+def render(actions: list[Action], state: CallState, persona: Persona, faq: dict[str, FaqEntry]) -> str:
+    return " ".join(p.text for p in render_parts(actions, state, persona, faq))
 
 
 def commit(state: CallState, actions: list[Action], facts: Facts) -> None:
@@ -561,8 +597,10 @@ def message_of(state: CallState) -> dict:
 
 
 def next_reply(state: CallState, text: str, persona: Persona, faq: dict[str, FaqEntry], understand_fn=None,
-               decide_fn=decide_a, heard=None) -> tuple[str, CallState]:
-    """One caller turn in, one reply out. `heard` (audio_io.Heard) is optional and only recorded in the log."""
+               decide_fn=decide_a, heard=None, phrase_fn=None) -> tuple[str, CallState]:
+    """One caller turn in, one reply out. `heard` (audio_io.Heard) is optional and only recorded in the log.
+    `phrase_fn` (phrase.py) optionally rewords the fixed sentences more naturally; its output is checked by code
+    and any doubt falls back to the fixed sentences."""
     if state.state == ENDED:
         return "", state
     understand_fn = understand_fn or default_understand
@@ -601,7 +639,13 @@ def next_reply(state: CallState, text: str, persona: Persona, faq: dict[str, Faq
                 entry["decide_trace"] = decide_fn.last_trace
 
     actions = apply_limits(state, actions, persona)
-    reply = render(actions, state, persona, faq)
+    parts = render_parts(actions, state, persona, faq)
+    reply = " ".join(p.text for p in parts)
+    if phrase_fn is not None and any(p.rewrite for p in parts):
+        started = time.perf_counter()
+        reply, phrasing = phrase_fn(parts, state, text, persona)
+        phrasing["seconds"] = round(time.perf_counter() - started, 3)
+        entry["phrasing"] = phrasing
     commit(state, actions, facts)
     entry.update(facts=facts.model_dump(), actions=[a.model_dump() for a in actions], reply=reply,
                  state_after=state.state, waiting_for_after=state.waiting_for)

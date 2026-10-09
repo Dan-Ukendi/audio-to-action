@@ -121,6 +121,29 @@ in office hours · office: Unit 4, Mill Lane Trading Estate, Kelmbridge. Safety 
   and the matching safety advice (gas / carbon monoxide / water), an immediate push with minimal text, then still collect name and number.
 - **Limits:** 12 turns, 2 re-asks per detail, 2 silent turns in a row. Robocall or spam → a short goodbye, still logged.
 
+## 3.1 Natural wording (`phrase.py`, added after Phase 7 at the owner's request)
+The fixed sentences sounded stiff, so the model may now REWORD them. It still never decides anything: the state machine picks
+the step and builds the approved sentence; `phrase.py` only changes how it is said. Switch: `call.py --phrase natural|fixed`, and the
+"Wording" box on the page (natural is the page default; fixed is the default of `call.py` and of the evaluation).
+- Never sent to the model, always word for word: the urgent acknowledgement, the safety advice, the urgent goodbye ("nine nine nine"),
+  the spam goodbye, the silence and turn-limit endings. Everything else (questions, read-back, FAQ answers, normal goodbyes) is rewordable.
+- Each reworded sentence must pass plain-code checks, else the model sees the problems once, and after a second failure (or if the model is
+  down) the FIXED sentence is used: digits/symbols, a question that is lost or added, name/reason missing from a read-back, any changed
+  number (order checked for read-backs), a name or place nobody said, new promise/time/price words, too long, a question that now
+  asks for a different detail, an information line that dropped its facts.
+- Logged per turn in the call record (`phrasing`: used model/fixed, attempts, problems, seconds).
+- Measured on the 9 dev cards (qwen2.5:7b, GPU, final checks): 35 of 52 rewordable replies accepted, 17 fell back to the fixed sentence;
+  about 3 s extra per reply (median 3.2 s, max 4.2 s), which is most of the 5 s budget on top of listen + understand + speak. The checks
+  caught, among others, an FAQ answer replaced by an invented reaction, a changed number, a question turned into a different question
+  and a confirmation replaced by small talk. The wording is milder than hoped (mostly "Lovely, ..." and small rephrasings): the 7B model
+  stays close to the original, and the strict checks reject the bolder rewordings.
+- An independent review found and this version fixed: safety text reaching the model as context (now never sent, and Holly's own earlier
+  lines are not sent either), promise / advice / negation words allowed because the caller had said them, invented names as the first word
+  of a sentence, swapped FAQ numbers, read-back reasons that could be extended, a repeat request that could ask for a detail, and no timeout
+  (now 20 s per model call). Known limit: a word list cannot catch every possible promise.
+- Not done: the evaluation (`evaluate.py`) still measures the fixed sentences; "more natural" needs a blind side-by-side rating by the owner.
+- Rule change: "every sentence comes from persona.json / faq.json" became "every sentence is either one of them or a checked rewording of one".
+
 ## 4. Pre-registered decision rules (written before any model run)
 
 **A vs B (Phase 6).** Same understanding step, same cards (`score` split), temperature 0. Version B replaces version A as the

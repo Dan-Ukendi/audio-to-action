@@ -68,6 +68,7 @@ class Persona:
     max_reasks: int
     max_silent_turns: int
     lines: dict[str, str]
+    style: str = ""  # how Holly sounds when her sentences are reworded (phrase.py); the fixed lines stay the fallback
 
     def say(self, key: str, **values: str) -> str:
         """One fixed sentence with its placeholders filled in. A missing value is a bug: it raises."""
@@ -131,7 +132,7 @@ def load_persona(path: str | Path = DEFAULT_PERSONA) -> Persona:
     return Persona(
         business=data["business"], receptionist=data["receptionist"], speaker=speaker, taken_voice_ids=taken, part_voice_ids=part_ids,
         hint=hint, detail_order=order, max_turns=limits["max_turns"], max_reasks=limits["max_reasks_per_detail"],
-        max_silent_turns=limits["max_silent_turns"], lines=dict(lines),
+        max_silent_turns=limits["max_silent_turns"], lines=dict(lines), style=data.get("style", ""),
     )
 
 

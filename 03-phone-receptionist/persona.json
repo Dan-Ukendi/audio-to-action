@@ -56,6 +56,7 @@
       "Overmere"
     ]
   },
+  "style": "Warm, calm and brief, like a friendly British receptionist. Plain everyday words, contractions (I've, that's), one or two short sentences. A short human reaction to what the caller said is welcome (for example 'Oh dear, a burst pipe' or 'Lovely, thank you'), but never advice, promises, prices, times or any fact that was not given to you.",
   "detail_order": [
     "reason",
     "name",

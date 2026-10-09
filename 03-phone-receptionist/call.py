@@ -94,7 +94,7 @@ class CallRecord(BaseModel):
 
 def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_fn, channel=None, decide_fn=dialog.decide_a,
              on_urgent=None, understand_label: str = "model", prompt_version: str | None = None,
-             decide_label: str = "a") -> CallRecord:
+             decide_label: str = "a", phrase_fn=None) -> CallRecord:
     """Run one simulated call to its end. `on_urgent(state)` is called once, the turn the call is first flagged urgent
     (Phase 4 plugs the immediate push in there)."""
     channel = channel or TextChannel()
@@ -112,7 +112,8 @@ def run_call(card: Card, persona: Persona, faq: dict[str, FaqEntry], understand_
         asked = state.asking
         said = caller.reply(asked, heard=reply if asked == asks.CONFIRM else None)
         text, heard, caller_io = channel.hear(card, said, state.turns + 1)
-        reply, state = dialog.next_reply(state, text, persona, faq, understand_fn, decide_fn, heard=heard)
+        reply, state = dialog.next_reply(state, text, persona, faq, understand_fn, decide_fn, heard=heard,
+                                           phrase_fn=phrase_fn)
         entry = state.log[-1]
         if state.urgent and urgent_turn is None:
             urgent_turn = state.turns
@@ -173,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="model = the LLM fills the per-turn form (needs Ollama); rules = plain-code baseline, no model")
     parser.add_argument("--decide", choices=["a", "b"], default="a",
                         help="a = the state machine; b = the tool-calling agent (needs Ollama; falls back to a when it fails)")
+    parser.add_argument("--phrase", choices=["fixed", "natural"], default="fixed",
+                        help="fixed = the approved sentences as written; natural = the model rewords them, code checks the result (needs Ollama)")
     parser.add_argument("--audio", action="store_true", help="speak and listen for real (Piper + Whisper): laptop only")
     parser.add_argument("--save", action="store_true", help="save each call as JSON in 03-phone-receptionist/calls/ (git-ignored)")
     args = parser.parse_args(argv)
@@ -198,10 +201,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.decide == "b":
         from agent_dialog import make_decide_b
         decide_fn = make_decide_b()
+    phrase_fn = None
+    if args.phrase == "natural":
+        from phrase import make_phraser
+        phrase_fn = make_phraser()
     for card in chosen:
         channel = audio_channel_for(card, persona) if args.audio else None
         record = run_call(card, persona, faq, understand_fn, channel=channel, decide_fn=decide_fn, understand_label=label,
-                          prompt_version=version, decide_label=args.decide)
+                          prompt_version=version, decide_label=args.decide, phrase_fn=phrase_fn)
         print_transcript(record, persona)
         if args.save:
             print("saved", save_record(record, HERE / "calls"))

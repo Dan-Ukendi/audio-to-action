@@ -48,8 +48,16 @@ def make_decide(kind: str):
     return dialog.decide_a
 
 
-def start_call(persona, model: str, speaker: int | None, understanding: str, decision: str) -> AudioSession:
-    responder = dialog_responder(persona, load_faq(), make_understand(understanding), make_decide(decision))
+def make_phrase(kind: str):
+    """'natural' = the model rewords the approved sentences and code checks the result (phrase.py)."""
+    if kind.startswith("natural"):
+        from phrase import make_phraser
+        return make_phraser()
+    return None
+
+
+def start_call(persona, model: str, speaker: int | None, understanding: str, decision: str, wording: str = "fixed") -> AudioSession:
+    responder = dialog_responder(persona, load_faq(), make_understand(understanding), make_decide(decision), make_phrase(wording))
     session = AudioSession(responder, Path(tempfile.mkdtemp(prefix="call_")), hint=persona.hint, speaker=speaker, model=model)
     session.responder = responder
     session.greet(responder.greeting)
@@ -101,9 +109,11 @@ def render(embedded: bool = False) -> None:
         st.warning(f"No receptionist voice yet, replies are shown as text only. {problem}")
     understanding = ui.selectbox("Understanding", ["model", "rules"], help="model needs Ollama; rules is the no-model baseline")
     decision = ui.selectbox("Decision", ["A (state machine)", "B (agent)"])
+    wording = ui.selectbox("Wording", ["natural (model rewords, code checks)", "fixed (approved sentences)"],
+                           help="natural needs Ollama; any doubt falls back to the fixed sentence")
 
     if st.button("Start a call"):
-        st.session_state["call_session"] = start_call(persona, model, speaker, understanding, decision)
+        st.session_state["call_session"] = start_call(persona, model, speaker, understanding, decision, wording)
         st.session_state["mic"] = 0
     session: AudioSession | None = st.session_state.get("call_session")
     if session is None:

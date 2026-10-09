@@ -37,7 +37,7 @@ def test_starting_a_call_shows_the_greeting(monkeypatch):
 def test_the_sidebar_offers_understanding_and_decision_and_shows_what_was_understood(monkeypatch):
     monkeypatch.delenv("RECEPTIONIST_SPEAKER", raising=False)
     at = AppTest.from_file(APP, default_timeout=30).run()
-    assert [s.label for s in at.sidebar.selectbox][-2:] == ["Understanding", "Decision"]
+    assert [s.label for s in at.sidebar.selectbox][-3:] == ["Understanding", "Decision", "Wording"]
     at.button[0].click().run()
     assert not at.exception
     side = " ".join(e.value for e in at.sidebar.markdown)

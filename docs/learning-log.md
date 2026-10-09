@@ -1991,3 +1991,15 @@ Part 3 is complete in code. Next: the laptop runs in README section 8, then the 
 
 ### Review record (Phase 7)
 Checked together with Phase 6 in rounds 2 and 3: the facts in HANDOVER section 13, the root README status and the page wiring matched the code; the stale cross-reference between README section 8 and HANDOVER 13.4 was fixed.
+
+
+## Part 3 extra: natural wording (`phrase.py`)
+1. **What we built:** Holly's fixed sentences can now be reworded by the language model so she sounds more human ("Lovely, thank you, Priya. What is the best number to reach you on?"). The model only changes the wording; code still decides what she does, and code checks every reworded sentence.
+2. **Where it fits:** caller words -> understand (model + code checks) -> apply -> decide (state machine) -> render fixed sentences -> **reword (model) -> check (code) -> fixed sentence if any doubt** -> speak -> hand off.
+3. **How it works:** `dialog.render_parts()` marks each sentence rewritable or not (safety lines are not) and what must survive; `phrase.make_phraser()` sends the rewritable ones plus the last turns to the model with `shared.llm.structured_chat`; `Phrased` validates with `check_sentence()`; a failure is shown to the model once, then the fixed text is used.
+4. **Key concepts:** (a) separate the decision from the wording; (b) check the model with code on what must not change (numbers, names, promises); (c) a safe fallback so the call is never worse than before; (d) the model is told rules, but only the code checks are guarantees; (e) naturalness cannot be measured by code, so a human rates it.
+5. **Files:** `phrase.py`, `tests/test_phrase.py`, `dialog.py` (render_parts, phrase hook), `persona.py/json` (style), `call.py`, `session.py`, `app.py` (Wording box), README 3.1.
+6. **Try it:** `python 03-phone-receptionist\call.py --card c03 --phrase natural` (needs Ollama); compare with `--phrase fixed`.
+7. **What can go wrong:** the model copies the line (no change), over-uses "Lovely"/"Oh dear", adds delay (about 3 s per reply), or is rejected so often that the fixed text is mostly used (17 of 52 here).
+8. **Check my understanding:** Why are the safety lines not sent to the model at all? Which check would catch "a question turned into a different question"? Why is the fixed sentence the fallback rather than an error?
+9. **Next:** rate old vs new side by side on the dev cards, decide whether the 3 s is acceptable, and add a `--phrase` option to the evaluation.

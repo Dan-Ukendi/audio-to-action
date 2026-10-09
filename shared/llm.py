@@ -55,10 +55,10 @@ def short_errors(error: ValidationError) -> str:
 
 def structured_chat(schema: type[BaseModel], messages: list[dict], llm: str | None = None,
                     context: dict | None = None, fix_hint: str = DEFAULT_FIX_HINT,
-                    options: dict | None = None) -> StructuredReply:
+                    options: dict | None = None, timeout: float | None = None) -> StructuredReply:
     """Get a validated `schema` from the LLM, with exactly one retry on invalid output."""
     cfg = settings()
-    client = ollama.Client(host=cfg["host"])
+    client = ollama.Client(host=cfg["host"], **({"timeout": timeout} if timeout else {}))  # no timeout = wait as long as it takes
     messages = list(messages)  # we append to it; don't change the caller's list
     started = time.perf_counter()
     replies, rejected_because = [], None
