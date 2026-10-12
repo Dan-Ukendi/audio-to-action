@@ -7,7 +7,7 @@ no cloud APIs, no audio leaving the machine.
 |---|---|---|---|---|
 | 1 | `01-voicemail-triage/` | Voicemails → transcript → category, urgency, caller, number, summary → routed | Workflow | done |
 | 2 | `02-meeting-action-agent/` | Meeting recordings → action items → task tracker sync | Workflow + agent | done |
-| 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | State machine, then agent | built and tested without models; **not yet run on the laptop** (no evaluation numbers) |
+| 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | State machine, then agent | built and tested; run live on the laptop with the real models (natural wording, flow fixes); **formal evaluation numbers not measured yet** |
 
 `shared/` holds code reused across parts: transcription (+ name hint), schemas, the "fill a form with the LLM,
 validate, retry once" helper (`llm.py`), text-to-speech (`tts.py`), eval helpers, retries, notifications and
@@ -51,8 +51,25 @@ tool-calling **agent** (default) or with plain-code **rules** (`--sync rules`). 
 Measured: the agent beat the rules by one task on real extracted items (7/14 vs 6/14) at ~50 minutes of CPU per
 five meetings; on perfect input the rules won (14/14 vs 11/14). Details: [02-meeting-action-agent/README.md](02-meeting-action-agent/README.md).
 
+## Part 3: how it works (summary)
+"Holly" answers a simulated call for the fictional Brightwater Plumbing & Heating. Calls come from the browser microphone
+(push-to-talk) or from scripted synthetic callers; there is no telephony provider.
+```
+ caller's words ─► UNDERSTAND  (LLM fills a small form; plain code checks every name / number against the words)
+                ─► APPLY       (shared rules: never invent, emergencies, FAQ, spam)
+                ─► DECIDE      (version A: state machine in plain code | version B: tool-calling agent, measured against A)
+                ─► RENDER      (fixed sentences from persona.json / faq.json)
+                ─► REWORD      (optional: the LLM makes the sentence sound natural; code checks it, any doubt = fixed sentence)
+                ─► speak ─► at the end: hand-off to Part 1 (analyze, route, urgent push, voicemails.db)
+```
+- Safety lines (urgent acknowledgement, gas / water / CO advice, "nine nine nine", the urgent goodbye) are never reworded and never sent to the model.
+- A bare question ("what services do you offer?") is answered from the FAQ and is not taken as the reason for the call; a refusal to one
+  question does not end the call; spelling a name is off by default; a spoken number the model misses is read by plain code.
+- Try it: `python 03-phone-receptionist/call.py --card c03 --phrase natural` (simulated caller, needs Ollama), or the **Receptionist** tab of the app.
+- Details, decisions and the pre-registered A-vs-B rule: [03-phone-receptionist/README.md](03-phone-receptionist/README.md). Tests: `python -m pytest 03-phone-receptionist/tests`.
+
 ## Local app (add audio, run, see results)
-Double-click **`start_app.bat`** (or run `python -m streamlit run apppp.py`): a page opens at
+Double-click **`start_app.bat`** (or run `python -m streamlit run app/app.py`): a page opens at
 http://localhost:8501, reachable only from this computer.
 - **Voicemails** tab: drop audio files, or record one with the microphone → *Process the inbox* → a table of results (route, category, caller,
   number, summary, review flags); click a row for the transcript, the reasons for the route and the audio.
@@ -60,8 +77,8 @@ http://localhost:8501, reachable only from this computer.
   *rules* → *Process the inbox* → the task tracker, the items found in each meeting, every tracker change
   with its reason, and the agent's steps.
 - **Receptionist** tab (Part 3): press the microphone, speak, and Holly answers (version A state machine or B
-  agent; model or rules understanding). Rehearsal only: calls are not saved. Replies show as text until a voice
-  is chosen (`choose_voice.py`).
+  agent; model or rules understanding; natural or fixed wording). Rehearsal only: calls are not saved. Replies show as text until a voice
+  is chosen (`choose_voice.py`). The models load in the background when a call starts.
 - Runs happen in the background with a live log; failed files show the step and error, with *Retry failed*.
 - The sidebar warns if ffmpeg or Ollama is missing, or if there's too little free memory (~6 GB needed).
 The app uses the same inbox folders, databases and `run.py` scripts as the command line. Its code is in `app/`
@@ -78,6 +95,11 @@ ollama pull qwen2.5:7b            # ~4.7 GB
 python scripts\check_setup.py     # all [OK]? then you're ready
 ```
 The first transcription downloads the Whisper model (`small`, ~480 MB) to your user cache.
+
+**GPU (optional, NVIDIA).** Ollama uses the GPU by itself. For Whisper on the GPU, `requirements.txt` also installs the CUDA libraries
+(`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`, ~1.2 GB; `shared/transcribe.py` finds their DLLs) and `.env` needs `WHISPER_DEVICE=cuda` and
+`WHISPER_COMPUTE_TYPE=float16`. Measured on the RTX 5050: a 30 s clip with `small` takes 9.8 s on the CPU and 1.7 s on the GPU.
+Without the libraries, set `WHISPER_DEVICE=cpu` (`auto` picks the GPU and then fails).
 
 ## Using it
 ```powershell
@@ -103,7 +125,7 @@ because the public ntfy.sh server and anyone guessing the topic can read them.
 | Variable | Default | Meaning |
 |---|---|---|
 | `WHISPER_MODEL` | `small` | `large-v3-turbo` is more accurate, ~3× slower on CPU ([comparison](docs/transcription-comparison.md)) |
-| `WHISPER_DEVICE` / `WHISPER_COMPUTE_TYPE` | `auto` / `int8` | `cuda` / `float16` once the GPU works |
+| `WHISPER_DEVICE` / `WHISPER_COMPUTE_TYPE` | `auto` / `int8` | `cuda` / `float16` for the GPU (needs the CUDA libraries above); `cpu` / `int8` otherwise |
 | `WHISPER_CPU_THREADS` | `8` | 0 = library default (4) |
 | `OLLAMA_HOST` / `OLLAMA_MODEL` | `http://localhost:11434` / `qwen2.5:7b` | |
 | `ANALYSIS_PROMPT` | `v2` | prompt version in `shared/analyze.py` (`PROMPTS`) |
@@ -134,7 +156,7 @@ Default config `small:v2` (Whisper `small`, prompt v2, `qwen2.5:7b`, CPU) on the
 | Callback number correct | 16/18 (89 %), none invented | |
 | Caller name exact / first name | 10/18 / 14/18 | |
 | Re-running the same file | does nothing (hash check) | ✔ |
-| Time per new voicemail | ~20 s Whisper + ~1-4 min LLM on CPU | GPU would make this seconds |
+| Time per new voicemail | ~20 s Whisper + ~1-4 min LLM (measured on CPU) | the GPU is now active: Whisper is about 6x faster, not re-measured end to end |
 
 Most remaining errors come from transcription (misheard names and digits over a phone-quality line) and
 one scam that sounds urgent. A one-line prompt experiment (v3) changed answers on unrelated files and was
@@ -167,5 +189,5 @@ the database stay on this machine and are git-ignored; keep the repo outside syn
 Part 2 (meetings): [x] 0 plan · [x] 1 test set · [x] 2 transcription + hint · [x] 3 extraction · [x] 4 agent ·
 [x] 5 glue & rollback · [x] 6 evaluation (agent vs rules) · [x] 7 polish.
 Part 3 (phone receptionist): [~] 0 plan + persona + FAQ (built; owner confirmation of wording/FAQ and the laptop GPU check pending) · [x] 1 caller cards · [~] 2 audio loop (built; speeds not measured) · [~] 3 dialog A (built; prompt never run on a real model) ·
-[~] 4 hand-off (built; `call-v1` prompt never run on a real model) · [~] 5 dialog B (built; never run on a real model) · [~] 6 evaluation (harness built; no numbers yet) · [x] 7 polish. Plan: `docs/PART3_PLAN.md`; build notes and decisions:
+[~] 4 hand-off (built; `call-v1` prompt not yet evaluated) · [~] 5 dialog B (built; not yet compared with A on real runs) · [~] 6 evaluation (harness built; no numbers yet) · [x] 7 polish · [x] natural wording (`phrase.py`) · [x] call-flow fixes after the first live test. Plan: `docs/PART3_PLAN.md`; build notes and decisions:
 `03-phone-receptionist/README.md`.
