@@ -146,24 +146,6 @@ python 01-voicemail-triage\testset\generate.py      # rebuild the synthetic test
 The test set is 18 synthetic English voicemails for a fictional UK plumbing business, with an answer
 key written before the pipeline existed ([testset/README](01-voicemail-triage/testset/README.md)).
 
-## Results (Part 1)
-Default config `small:v2` (Whisper `small`, prompt v2, `qwen2.5:7b`, CPU) on the 18-file test set
-([full report](docs/eval-results.md)):
-
-| Metric | Result | Target |
-|---|---|---|
-| Urgent voicemails missed | **0/6** | 0 |
-| Urgent voicemails archived | **0** | 0 |
-| Category accuracy | 15/18 (83 %) | ≥ 90 %, **not met** |
-| Callback number correct | 16/18 (89 %), none invented | |
-| Caller name exact / first name | 10/18 / 14/18 | |
-| Re-running the same file | does nothing (hash check) | ✔ |
-| Time per new voicemail | ~20 s Whisper + ~1-4 min LLM (measured on CPU) | the GPU is now active: Whisper is about 6x faster, not re-measured end to end |
-
-Most remaining errors come from transcription (misheard names and digits over a phone-quality line) and
-one scam that sounds urgent. A one-line prompt experiment (v3) changed answers on unrelated files and was
-not adopted; further gains need more test data, not more prompt tweaks. See [eval notes](docs/eval-notes.md).
-
 ## Privacy
 Voicemails contain other people's personal data (GDPR). Audio, transcripts, results, logs, digests and
 the database stay on this machine and are git-ignored; keep the repo outside synced folders
