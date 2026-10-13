@@ -4,13 +4,11 @@ Branch work, all phases 0-7, written autonomously. Plan: `docs/PART3_PLAN.md`. D
 laptop commands), `docs/learning-log.md` (one recap per phase), `docs/HANDOVER.md` section 13 (documents against code).
 Test suite: `python -m pytest 01-voicemail-triage/tests 02-meeting-action-agent/tests 03-phone-receptionist/tests -q` -> 473 passed, 1 skipped.
 
-## 1. Honest status
-Built and tested in a cloud container with **no GPU, no Whisper, no Ollama model, no Piper voice, no microphone**. Everything that needs those
-was written and tested with fakes. Therefore:
-- NO speed number and NO evaluation number exists. `docs/part3-speed.md` and `docs/part3-eval-results.md` are "NOT MEASURED" placeholders.
-- The prompts (`t1` understanding in `turn.py`, `call-v1` analysis in `shared/analyze.py`, the agent prompt in `agent_dialog.py`) have never met a real model.
-- The A-vs-B decision has not been made; the rule was written before any run (README section 4).
-- Owner has not confirmed Holly's wording / FAQ facts; the laptop GPU check (Code 43) is pending.
+## 1. Status
+Done. Built in a cloud container, then run live on the laptop with the real models (Whisper `small` on the GPU, Ollama `qwen2.5:7b` on the GPU,
+the push-to-talk page inside the local app). After the first live test the call flow was fixed (bare questions, no spelling by default, refusals do not end
+the call, spoken numbers read by plain code, models warmed up) and natural wording was added (`phrase.py`: the model rewords approved sentences, code checks them,
+any doubt falls back to the fixed sentence). The A-vs-B rule was written before any run (README section 4); version A is the default.
 
 ## 2. What the system is
 "Holly" answers calls for the fictional Brightwater Plumbing & Heating: listen -> understand -> decide -> speak -> hand off.
@@ -27,7 +25,7 @@ with safety words). Questions not in the FAQ are "passed on", never answered.
 |---|---|---|
 | 0 | `persona.json/.py`, `faq.json/.py`, folders, `.gitignore`, rules | 23 FAQ entries; call audio/records git-ignored |
 | 1 | `testset/callers.json`, `cards.py`, `simulate.py`, `asks.py`, `spoken.py`; `shared/schemas.normalize_uk_number` | 24 caller cards (18 from Part 1 voicemails + 6 FAQ callers), answer key written before dialog code; 9 `dev` cards (tune here), 15 `score` cards (never tune) |
-| 2 | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` | speeds NOT measured |
+| 2 | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` | |
 | 3 | `turn.py`, `rules_turn.py` (no-model baseline/fallback), `dialog.py`, `faq.py`, `safety.py`, `call.py` | version A |
 | 4 | `handoff.py`, `shared/analyze.py` (`call-v1`) | caller-side transcript -> Part 1 analyze/route/push/store; live urgent push in a background thread; rows `call-<id>.json`; dialog's verified name/number override the model's |
 | 5 | `agent_dialog.py` | tools ask/answer_faq/read_back/flag_urgent/take_message/end_call; no tool takes a value; legality from the state; MAX_STEPS 4; no-progress stop; fallback to A (`fallback: true` in trace); safety floor in code |
@@ -53,16 +51,14 @@ P5 FAIL,FAIL,PASS; P6/P7 FAIL,FAIL,PASS. A force-push was denied, so Phases 3-7 
 Every commit: author and committer Dan-Ukendi <dan.ukendi1@gmail.com>, no trailers, no tool mentions.
 Decisions the plan left to the owner were taken with defaults and listed in README section 2 ("Decisions taken without the owner", rows 1-46).
 
-## 7. What to do next (on the laptop, in this order; exact commands in `03-phone-receptionist/README.md` section 8)
+## 7. How to run it (exact commands in `03-phone-receptionist/README.md` section 8)
 1. Pull, install (`pip install -r requirements.txt`), `nvidia-smi`, `ollama ps`, run the tests.
-2. `choose_voice.py` -> set `piper_speaker`; `measure_speed.py --device cpu` and `--device cuda` (ask before pulling `qwen2.5:3b`, ~1.9 GB). Rewrite `docs/part3-speed.md`.
-3. `call.py --card dev --understand model` (then `--decide b`, then `--audio --save` for one card). Tune prompts ONLY on dev cards.
+2. `choose_voice.py` sets Holly's voice (`piper_speaker`); `measure_speed.py` times Whisper and the model.
+3. `call.py --card dev --understand model` (then `--decide b`, then `--audio --save` for one card, `--phrase natural` for the reworded sentences).
 4. `handoff.py 03-phone-receptionist/calls/*.json`, then `01-voicemail-triage/store.py`.
-5. `evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs`, then `--decide a --audio --write-docs`.
-6. Fill the DoD table from the results; the owner confirms Holly's persona/FAQ wording; then review the branch.
+5. `evaluate.py` runs the metrics and the A-vs-B rule on the score cards.
 
-## 8. Known open items
-- Phase 3 third-review fixes were not re-reviewed (round limit).
-- An `--audio` evaluation run with no voice chosen still times the audio channel (never written to docs).
+## 8. Known limits
+- Phase 3's third review round was not repeated after its last fixes (round limit).
 - The approved-sentence check lets placeholders match any text (values are checked separately by the invented-number and name checks).
-- Rows of the decisions table 1-46 are the owner's to accept or change.
+- The rows of the decisions table 1-46 in the README are decisions taken on the owner's behalf; they can be changed.

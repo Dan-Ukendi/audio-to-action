@@ -64,12 +64,17 @@ def structured_chat(schema: type[BaseModel], messages: list[dict], llm: str | No
     replies, rejected_because = [], None
 
     for attempt in (1, 2):  # first try + exactly one retry
-        response = client.chat(
-            model=llm or cfg["model"],
-            messages=messages,
-            format=schema.model_json_schema(),
-            options={"temperature": 0, **(options or {})},  # temperature 0: repeatable runs
-        )
+        chat_options = {"temperature": 0, **(options or {})}  # temperature 0: repeatable runs
+        try:
+            response = client.chat(model=llm or cfg["model"], messages=messages, format=schema.model_json_schema(),
+                                   options=chat_options)
+        except ollama.ResponseError as error:
+            # Ollama aborts a reply that loops ("token repeat limit reached", HTTP 500): a temperature-0 quirk seen on short,
+            # chatty transcripts. One more try with a little randomness and a repeat penalty usually gets a normal answer.
+            if "repeat" not in str(error).lower():
+                raise
+            response = client.chat(model=llm or cfg["model"], messages=messages, format=schema.model_json_schema(),
+                                   options={**chat_options, "temperature": 0.3, "repeat_penalty": 1.15})
         raw = response.message.content
         replies.append(raw)
         try:

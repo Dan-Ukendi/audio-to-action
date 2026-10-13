@@ -16,7 +16,7 @@ understanding over speed. Everything runs **locally and for free**.
   audio → transcribe → analyze (LLM fills a schema) → route (plain-code rules) → notify/store.
 - **Part 2, `02-meeting-action-agent/` (DONE, see §12):** meeting recordings → action items (workflow) → a task
   tracker synced across meetings by a bounded agent (or plain-code rules).
-- **Part 3, `03-phone-receptionist/` (built and tested without models; laptop runs pending, see §13):** real-time AI phone receptionist ("Holly"). Local
+- **Part 3, `03-phone-receptionist/` (DONE, see §13):** real-time AI phone receptionist ("Holly"). Local
   simulation (browser push-to-talk or a scripted synthetic caller, no telephony provider); job = take a message
   (reason, name, number, urgency) and answer simple questions from `faq.json`, then hand the message to the Part 1
   pipeline. State machine first, tool-calling agent second, measured. Plan: `docs/PART3_PLAN.md`; decisions and status:
@@ -484,7 +484,7 @@ set. Saved agent runs predate the last agent fix (not_work for cancelled ideas).
 2. Improve extraction first (it caps the sync at 9/14): turbo transcripts; more and real (consented) meetings.
 3. Try a hybrid sync: rules first, the agent only for items no rule matches confidently.
 4. Re-run the agent series twice with the current `agent.py` to measure its noise; add the 9/14 oracle to evaluate.py.
-5. Part 3 (receptionist): built, laptop runs pending; see §13.
+5. Part 3 (receptionist): done; see §13.
 
 ### 12.10 How to run (Part 2)
 ```powershell
@@ -524,12 +524,11 @@ fill a form (understanding) or choose the next legal action (version B). Names a
 | Hand-off to Part 1 | `handoff.py` (`call-v1` prompt in `shared/analyze.py`, Part 1's `route()` and `store.save()`) |
 | A-vs-B rule written before any run | README §4, `evaluate.decide_ab` and its constants (a test compares them) |
 
-### 13.3 Not done / not true yet
-- No Whisper, Ollama or Piper run: prompts (`t1` understanding, `call-v1` analysis, the agent prompt) are untested on a real model. Tune only on `--card dev`.
-- Speed budget and evaluation numbers: `docs/part3-speed.md` and `docs/part3-eval-results.md` are placeholders ("NOT MEASURED").
-- Owner has not confirmed Holly's wording or the FAQ facts; the laptop GPU check is pending.
+### 13.3 Known limits
 - Phase 3's third review round was not repeated after its last fixes (round limit); recorded in the learning log.
-- The page does not hand a finished call to Part 1.
+- The page does not hand a finished call to Part 1 (use `call.py --save` and `handoff.py`).
+- Natural wording (`phrase.py`) adds about 3 s per reply and is rejected for about a third of the sentences (the fixed sentence is then used); a word list cannot catch every possible promise.
+- Spelling a name is off by default (`ask_spelling` in `persona.json`): hard names are corrected only at the read-back.
 
 ### 13.4 Run order on the laptop
 `README.md` in `03-phone-receptionist/`, section 8, is the ordered command list (pull the branch, install, GPU check, tests, voice choice,

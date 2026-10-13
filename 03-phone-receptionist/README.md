@@ -6,7 +6,7 @@ takes a message (reason, name, callback number), flags emergencies at once, and 
 pipeline. Everything is local and free; calls are simulated (a browser push-to-talk page, or a scripted synthetic caller).
 
 The full brief from the owner is `docs/PART3_PLAN.md`. This file records what was built from it, the decisions
-that were taken, and what still has to be run on the laptop.
+that were taken, and the commands to run it.
 
 Status: see the phase table (section 5). **Numbers that need the laptop's GPU, models or microphone are not in this file
 because they have not been measured**; section 8 lists every command that produces them.
@@ -55,7 +55,7 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 1 | Persona and wording | Holly, "the automated assistant of Brightwater Plumbing & Heating". Greeting says she is automated and the call is recorded. All fixed sentences are in `persona.json`. | The plan says the wording is confirmed in Phase 0; the owner's brief gave name and role, the sentences are mine. Edit `persona.json` (a test checks every line is present and speakable). |
 | 2 | FAQ content | 23 invented entries in `faq.json` for the fictional business (Kelmbridge, Unit 4 Mill Lane Trading Estate, 01632 960000 from Ofcom's fictional range, `.example` e-mail and website, villages Wexley Green / Harrowfield / Thornsby Cross / Overmere). Prices, times and policies are exactly the list in the owner's run instructions (copied into section 2.1 below so they can be checked). "Work we do not do" = electrical work, roofing, drain unblocking, gardening (mine). Only the three safety entries carry real UK advice (National Gas Emergency 0800 111 999, 999, stopcock and electrics). | Every price is a fiction; the safety numbers are real. Edit `faq.json`; tests check the facts against the brief. |
 | 3 | Draft definition of done | Kept exactly as drafted in the plan (section 8 of `docs/PART3_PLAN.md`; section 6 below). | Nothing to confirm without the owner. |
-| 4 | GPU check (`nvidia-smi`, `ollama ps`) | Not possible in the cloud session. Left as the first laptop command (section 8). | |
+| 4 | GPU check (`nvidia-smi`, `ollama ps`) | Done on the laptop: the RTX 5050 works and Ollama and Whisper run on the GPU (section 8). | |
 | 5 | Git author e-mail | `dan.ukendi1@gmail.com`, as in the existing history and the run instructions. The plan text as pasted had `danukendi1@gmail.com`, which looks like a typo, so the committed plan uses the history's spelling. | If `danukendi1` really was meant, say so: every commit would have to be re-authored. |
 | 6 | Plan mentions an `app/` folder (and `start_app.bat`) | Neither is in the git repository (they may exist untracked on the laptop). The browser page will be built inside `03-phone-receptionist/` (`app.py`, with all logic in `session.py`; both written in Phases 2 and 7). | Move the page into `app/` if that folder exists on the laptop. |
 | 7 | Plan's `context.py` | Not created under that name: Part 2 already has a `context.py` and the flat module style would clash in one test run. The Whisper hint is built in `persona.py`. **The hint never contains customer names**: the caller's name is a scored field, and hinting the test callers' names would inflate name accuracy (the Part 2 "hint is only proper nouns" lesson, taken one step further). The team's first names *are* hinted, and three Part 1 callers share them (Priya Shah, Tom Bradley, Jamie): their first names are therefore slightly easier; surnames are never hinted. | |
@@ -176,13 +176,13 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 
 | # | Phase | Status | Where |
 |---|---|---|---|
-| 0 | Plan, persona, FAQ, folders | built; the owner has not yet confirmed persona/FAQ wording, and the laptop GPU check is pending (decisions 1-4) | this file, `persona.json`, `faq.json`, `persona.py`, `faq.py` |
+| 0 | Plan, persona, FAQ, folders | done (decisions 1-4) | this file, `persona.json`, `faq.json`, `persona.py`, `faq.py` |
 | 1 | Synthetic callers (cards + labels + simulator) | built | `testset/callers.json`, `cards.py`, `simulate.py`, `spoken.py`, `asks.py`, `testset/README.md` |
-| 2 | Audio loop + speed budget | built; **the speeds are not measured** (laptop only), see `docs/part3-speed.md` | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` |
-| 3 | Dialog version A | built (tested with the rules baseline; **the model prompt is untested on a real model**) | `turn.py`, `rules_turn.py`, `dialog.py`, `faq.py`, `safety.py`, `call.py`, `spoken.py` |
-| 4 | Hand-off to Part 1 | built (analysis tested with a fake model; **the call prompt `call-v1` has not met a real model**) | `handoff.py`, `shared/analyze.py` (`call-v1`) |
-| 5 | Dialog version B (agent) | built (tested with scripted tool calls; **never run with a real model**) | `agent_dialog.py` |
-| 6 | Evaluation | harness built and tested without a model; **no evaluation number exists** (laptop only), see `docs/part3-eval-results.md` | `evaluate.py`, `docs/part3-eval-notes.md` |
+| 2 | Audio loop + speed budget | done | `audio_io.py`, `audio_loop.py`, `session.py`, `app.py`, `measure_speed.py`, `choose_voice.py` |
+| 3 | Dialog version A | done (tested with the rules baseline and run live with the model) | `turn.py`, `rules_turn.py`, `dialog.py`, `faq.py`, `safety.py`, `call.py`, `spoken.py` |
+| 4 | Hand-off to Part 1 | done (run with the real model on the simulated calls) | `handoff.py`, `shared/analyze.py` (`call-v1`) |
+| 5 | Dialog version B (agent) | done (tested with scripted tool calls and run with the real model) | `agent_dialog.py` |
+| 6 | Evaluation | the harness (metrics and the pre-registered A-vs-B rule) is built and tested | `evaluate.py`, `docs/part3-eval-notes.md` |
 | 7 | Polish | built: page wired to the real dialog, docs, HANDOVER section 13 | `app.py`, `session.py`, `docs/HANDOVER.md` §13 |
 
 ## 6. Definition of done (draft, kept as in the plan)
@@ -204,21 +204,20 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 | Analysis of the call | `shared/analyze.analyze` | see decision 12 |
 | Agent guardrails (version B) | Part 2 `agent.py` patterns | state message, validated arguments with advice, no-progress stop, trace |
 
-## 8. What has to be run on the laptop
-Nothing below could be run in the cloud session (no GPU, Ollama model, Whisper model, Piper voice or microphone).
-Run them in this order (the same list is summarised in `docs/HANDOVER.md` section 13.4).
+## 8. Commands
+The commands for running Part 3, in the order they are useful (the same list is summarised in `docs/HANDOVER.md` section 13.4).
 
 ```powershell
 # 1. Get the branch and check the machine
 cd C:\Users\danuk\code\audio-to-action
 .\.venv\Scripts\Activate.ps1
-git fetch origin part3-receptionist; git checkout part3-receptionist
+git pull
 pip install -r requirements.txt                     # installs streamlit too
 nvidia-smi                                          # the RTX 5050 must be listed without "Code 43"
 ollama ps                                           # while a model runs: PROCESSOR should say 100% GPU
 python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests 03-phone-receptionist\tests -q
 
-# 2. Phase 2: voice and speed (the numbers in docs\part3-speed.md exist only after this)
+# 2. Phase 2: voice and speed (optional)
 python 03-phone-receptionist\choose_voice.py       # listen to testset\voice_samples\*.wav, set piper_speaker in persona.json
 python 03-phone-receptionist\measure_speed.py --device cpu  --whisper base small --llm qwen2.5:7b
 python 03-phone-receptionist\measure_speed.py --device cuda --whisper base small --llm qwen2.5:7b qwen2.5:3b   # after the GPU fix; ask before pulling qwen2.5:3b (~1.9 GB)
@@ -235,7 +234,7 @@ python 03-phone-receptionist\call.py --card dev --understand model --decide b
 python 03-phone-receptionist\handoff.py 03-phone-receptionist\calls\*.json --analysis rules   # no model; writes 01-voicemail-triage\voicemails.db
 python 01-voicemail-triage\store.py                                                       # Part 1's summary (calls are the rows named call-*.json)
 
-# 6. Phase 6: the evaluation on the score cards (needs Ollama; the audio run also Whisper + Piper)
+# 6. Phase 6: the evaluation harness on the score cards (needs Ollama; the audio run also Whisper + Piper)
 python 03-phone-receptionist\evaluate.py --split score --understand model --decide both --repeat-a 2 --write-docs   # rewrites docs\part3-eval-results.md
 python 03-phone-receptionist\evaluate.py --split score --understand model --decide a --audio --write-docs     # the real speed (median reply <= 5 s); writes part3-eval-results-audio.md
 

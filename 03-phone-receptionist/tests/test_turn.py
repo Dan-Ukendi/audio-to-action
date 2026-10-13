@@ -47,8 +47,7 @@ def test_the_uk_number_rule_is_one_function_for_part_1_and_part_3():
 
 def test_form_validators():
     assert form(number="01632 960 501").number == "01632960501"
-    with pytest.raises(ValidationError, match="UK phone number"):
-        form(number="12345")
+    assert form(number="12345").number is None  # a wrong number is dropped (the dialog reads numbers in plain code), not an error
     assert form(name="unknown").name is None and form(name="  Dave ").name == "Dave" and form(reason="null").reason is None
     with pytest.raises(ValidationError, match="short phrase"):
         form(reason="one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen")
@@ -157,8 +156,8 @@ def test_a_network_error_also_falls_back_but_a_bug_does_not():
 
 def test_the_real_structured_chat_is_wired_to_the_form(monkeypatch):
     """structured_chat with a fake Ollama client: the schema is sent as the required format, the retry works."""
-    replies = ['{"heard_summary": "x", "name": null, "number": "123", "reason": null, "is_correction": false, '
-               '"correction_field": null, "question_topic": null, "emergency": false, "wants_to_end": false, "is_automated": false}',
+    replies = ['{"heard_summary": "x", "name": null, "number": null, "reason": null, "is_correction": false, '
+               '"correction_field": null, "question_topic": null, "emergency": "maybe", "wants_to_end": false, "is_automated": false}',
                '{"heard_summary": "x", "name": "Dave", "number": null, "reason": null, "is_correction": false, '
                '"correction_field": null, "question_topic": null, "emergency": false, "wants_to_end": false, "is_automated": false}']
     calls = []
@@ -176,7 +175,7 @@ def test_the_real_structured_chat_is_wired_to_the_form(monkeypatch):
     u = understand("It's Dave", ctx(asked=asks.NAME), chat=structured_chat, llm="test-model")
     assert u.turn.name == "Dave" and u.attempts == 2 and not u.fallback
     assert calls[0]["format"] == CallerTurn.model_json_schema() and calls[0]["options"]["temperature"] == 0
-    assert "UK phone number" in calls[1]["messages"][-1]["content"]  # the retry showed the model what was wrong
+    assert "emergency" in calls[1]["messages"][-1]["content"]  # the retry showed the model what was wrong
 
 
 def test_the_prompt_version_is_part_of_what_a_saved_call_records():
@@ -231,3 +230,25 @@ def test_an_ollama_server_error_falls_back_instead_of_ending_the_call():
         raise ollama.ResponseError("model 'qwen2.5:7b' not found", 404)
 
     assert understand("It's Dave.", ctx(asked=asks.NAME), chat=no_model).fallback
+
+
+def test_a_looping_reply_is_retried_once_with_a_repeat_penalty(monkeypatch):
+    import ollama
+    good = ('{"heard_summary": "x", "name": "Dave", "number": null, "reason": null, "is_correction": false, '
+            '"correction_field": null, "question_topic": null, "emergency": false, "wants_to_end": false, "is_automated": false}')
+    seen = []
+
+    class FakeClient:
+        def __init__(self, host=None, **kw):
+            pass
+
+        def chat(self, model, messages, format, options):
+            seen.append(options)
+            if len(seen) == 1:
+                raise ollama.ResponseError("prediction aborted, token repeat limit reached", 500)
+            return SimpleNamespace(message=SimpleNamespace(content=good))
+
+    import shared.llm as llm_module
+    monkeypatch.setattr(llm_module.ollama, "Client", FakeClient)
+    u = understand("It's Dave", ctx(asked=asks.NAME), chat=structured_chat, llm="test-model")
+    assert u.turn.name == "Dave" and seen[0]["temperature"] == 0 and seen[1]["repeat_penalty"] > 1

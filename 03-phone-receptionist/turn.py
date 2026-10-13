@@ -78,7 +78,13 @@ class CallerTurn(BaseModel):
     @field_validator("number")
     @classmethod
     def uk_number(cls, value: str | None) -> str | None:
-        return normalize_uk_number(value)  # the same rule as Part 1's callback_number
+        # The same rule as Part 1's callback_number, but a number the model got wrong is dropped instead of failing the whole
+        # form: the dialog reads spoken numbers from the caller's words in plain code (dialog.apply_turn), which is more
+        # reliable than the model ("oh seven seven double oh, nine hundred, ..." made it fail twice in live calls).
+        try:
+            return normalize_uk_number(value)
+        except ValueError:
+            return None
 
     @field_validator("question_topic")
     @classmethod

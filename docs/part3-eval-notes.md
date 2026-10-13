@@ -1,6 +1,6 @@
 # Part 3 evaluation: what is measured and how
 
-No result is written in this file. The numbers go to `docs/part3-eval-results.md`, and only after a run with a real model on the laptop.
+This file explains the metrics and the rule. The numbers of an evaluation run go to `docs/part3-eval-results.md`, only after a valid run with a real model.
 
 ## The command
 

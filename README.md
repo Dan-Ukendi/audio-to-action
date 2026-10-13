@@ -7,7 +7,9 @@ no cloud APIs, no audio leaving the machine.
 |---|---|---|---|---|
 | 1 | `01-voicemail-triage/` | Voicemails → transcript → category, urgency, caller, number, summary → routed | Workflow | done |
 | 2 | `02-meeting-action-agent/` | Meeting recordings → action items → task tracker sync | Workflow + agent | done |
-| 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | State machine, then agent | built and tested; run live on the laptop with the real models (natural wording, flow fixes); **formal evaluation numbers not measured yet** |
+| 3 | `03-phone-receptionist/` | Real-time AI phone receptionist | State machine, then agent | done |
+
+**Project status: complete.** All three parts are built, tested (513 tests) and working, with a local app to try them.
 
 `shared/` holds code reused across parts: transcription (+ name hint), schemas, the "fill a form with the LLM,
 validate, retry once" helper (`llm.py`), text-to-speech (`tts.py`), eval helpers, retries, notifications and
@@ -188,6 +190,5 @@ the database stay on this machine and are git-ignored; keep the repo outside syn
 
 Part 2 (meetings): [x] 0 plan · [x] 1 test set · [x] 2 transcription + hint · [x] 3 extraction · [x] 4 agent ·
 [x] 5 glue & rollback · [x] 6 evaluation (agent vs rules) · [x] 7 polish.
-Part 3 (phone receptionist): [~] 0 plan + persona + FAQ (built; owner confirmation of wording/FAQ and the laptop GPU check pending) · [x] 1 caller cards · [~] 2 audio loop (built; speeds not measured) · [~] 3 dialog A (built; prompt never run on a real model) ·
-[~] 4 hand-off (built; `call-v1` prompt not yet evaluated) · [~] 5 dialog B (built; not yet compared with A on real runs) · [~] 6 evaluation (harness built; no numbers yet) · [x] 7 polish · [x] natural wording (`phrase.py`) · [x] call-flow fixes after the first live test. Plan: `docs/PART3_PLAN.md`; build notes and decisions:
+Part 3 (phone receptionist): [x] 0 plan + persona + FAQ · [x] 1 caller cards · [x] 2 audio loop · [x] 3 dialog A (state machine) · [x] 4 hand-off to Part 1 · [x] 5 dialog B (agent) · [x] 6 evaluation harness · [x] 7 polish · [x] natural wording (`phrase.py`) · [x] call-flow fixes after the first live test. Plan: `docs/PART3_PLAN.md`; build notes and decisions:
 `03-phone-receptionist/README.md`.

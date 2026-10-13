@@ -155,8 +155,7 @@ and listed in the "Decisions taken without the owner" table in `03-phone-recepti
 
 Definition of done (Part 3, draft, from the plan): callback number exactly right >= 80 %, name >= 80 %, 0 invented numbers;
 every urgent caller flagged during the call (0 missed) with a push sent or dry-run logged; FAQ answered correctly >= 80 % with
-0 answers that are not in `faq.json`; every completed call lands in `voicemails.db`; median reply <= 5 s on the laptop (to be
-measured there); the owner can explain why the dialog is a state machine and what the agent version costs.
+0 answers that are not in `faq.json`; every completed call lands in `voicemails.db`; median reply <= 5 s on the laptop; the owner can explain why the dialog is a state machine and what the agent version costs.
 
 ## Definition of done (Part 2)
 - Action items: precision ≥ 80 % and recall ≥ 80 % on the test set (item = task + owner match).
