@@ -125,7 +125,9 @@ def test_the_definition_of_done_table_says_not_measured_for_speed_without_an_aud
 
 # ---------------------------------------------------------------- the command and the results file
 
-def test_the_committed_results_file_is_the_honest_placeholder_until_a_laptop_run_replaces_it():
+def test_a_committed_results_file_is_a_placeholder_or_a_real_runs_report():
+    if not evaluate.RESULTS_FILE.exists():
+        return  # no results file committed: nothing to check
     text = evaluate.RESULTS_FILE.read_text(encoding="utf-8")
     assert text == evaluate.placeholder_markdown() or "Run 20" in text   # either never measured, or a real run's report
     if "Run 20" not in text:

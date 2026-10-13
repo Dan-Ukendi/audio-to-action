@@ -287,11 +287,9 @@ digests and the databases stay on this machine and are git-ignored; keep the rep
 call is recorded.
 
 ## Docs
-- [docs/HANDOVER.md](docs/HANDOVER.md): full technical report (architecture, modules, decisions, known issues)
 - [docs/learning-log.md](docs/learning-log.md): every phase explained (what, how, concepts, questions)
 - [docs/eval-results.md](docs/eval-results.md) and [docs/eval-notes.md](docs/eval-notes.md): Part 1 metrics, every error, the prompt experiment
 - [docs/transcription-comparison.md](docs/transcription-comparison.md): Whisper model comparison on voicemails
 - [docs/part2-eval-results.md](docs/part2-eval-results.md): Part 2 metrics, the agent-vs-rules experiment, definition of done
 - [docs/part2-transcription-comparison.md](docs/part2-transcription-comparison.md): Whisper models × name hint on meetings
-- [docs/PART3_PLAN.md](docs/PART3_PLAN.md): the Part 3 brief; [docs/part3-eval-notes.md](docs/part3-eval-notes.md): Part 3 metrics and the A-vs-B rule
-- [docs/shared-for-part2.md](docs/shared-for-part2.md): what Part 2 could reuse from Part 1 (written before Part 2)
+- [docs/part3-eval-notes.md](docs/part3-eval-notes.md): Part 3 metrics and the A-vs-B rule

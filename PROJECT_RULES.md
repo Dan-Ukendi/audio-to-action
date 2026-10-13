@@ -53,7 +53,7 @@ Keep it clear and friendly rather than long.
 4. Routing step (done: `routing.py` pure `route()` + safety-word net + review flags, `deliver.py`, `store.py` SQLite, `shared/notify.py`. User chose: minimal push text (no caller data), sales -> archive, ntfy dry run (`NTFY_DRY_RUN=1`) until a real random topic is set. Tests: `python -m pytest 01-voicemail-triage/tests`)
 5. Glue & reliability (done: `run.py` [--watch, --retry-failed, --base], skip if hash in SQLite, `shared/retry.py` retries only transient errors 2 s/4 s, push-before-save = at-least-once, `failed/` + `.error.txt`, `logs/run.log`. Tested end-to-end in a scratch folder)
 6. Evaluation (done: `evaluate.py` + `shared/evaluation.py`, `docs/eval-results.md` generated, conclusions in `docs/eval-notes.md`. small:v2 = category 15/18, urgent FN 0/6, names 10/18, numbers 16/18. Experiment v2->v3 (name example only) failed its pre-set rule: v2 stays. DoD 90% category NOT met; next: held-out data, turbo transcripts)
-7. Polish (done: `digest.py` daily page + counts-only push, full README with architecture/results/Task Scheduler commands, `docs/shared-for-part2.md`, `docs/HANDOVER.md` technical report). Part 1 complete. Phase 7 of Part 2 fixed Part 1's run.py file move (rename, no copy)
+7. Polish (done: `digest.py` daily page + counts-only push, full README with architecture/results/Task Scheduler commands). Part 1 complete. Phase 7 of Part 2 fixed Part 1's run.py file move (rename, no copy)
 
 ## Definition of done (Part 1)
 - ≥ 90% category accuracy on the test set.
@@ -118,11 +118,11 @@ and every tracker change recorded with its reason (reversible).
    instant. Pre-registered rule -> default stays agent (margin within noise; both tuned on this set; perfect sync of
    extracted items = 9/14). DoD: extraction P/R and tracker >= 80 % NOT met; guardrails + idempotency met.
    After the run: not_work allowed for cancelled items with no similar task (m1 extracted 16 -> 2 calls))
-7. Polish (done: Part 2 README rewritten, main README + docs/HANDOVER.md §12 updated, Part 1 run.py move fix,
+7. Polish (done: Part 2 README rewritten, main README updated, Part 1 run.py move fix,
    learning log corrected; Part 2 complete)
 
 ## Part 3: phone-receptionist (`03-phone-receptionist/`)
-Full plan: `docs/PART3_PLAN.md` (the owner's brief). What was built from it and every decision taken: `03-phone-receptionist/README.md`.
+What was built from the owner's brief and every decision taken: `03-phone-receptionist/README.md`.
 
 Choices (owner, 2026-10-07/08):
 - Calls reach the receptionist by **local simulation**: live use = push-to-talk in the browser (Streamlit `st.audio_input`),
@@ -146,7 +146,7 @@ Phases (Part 3):
 4. Hand-off to Part 1 (`handoff.py`)
 5. Dialog version B (tool-calling agent, `agent_dialog.py`)
 6. Evaluation (`evaluate.py`, A vs B with a rule written before the runs)
-7. Polish (app page, README, learning log, HANDOVER section 13)
+7. Polish (app page, README, learning log)
 
 When the owner authorises several phases in one go, rule 1 ("stop after each phase") is replaced by: after each phase a
 SEPARATE reviewer agent checks the phase against the plan and runs the tests (max 3 review rounds per phase), then the

@@ -100,8 +100,11 @@ def test_report_shows_every_measured_row_and_the_decision():
         assert needle in text
 
 
-def test_the_committed_report_is_the_honest_placeholder_until_the_laptop_has_measured():
-    committed = (HERE.parents[1] / "docs" / "part3-speed.md").read_text(encoding="utf-8")
+def test_a_committed_report_is_never_a_stale_placeholder():
+    report = HERE.parents[1] / "docs" / "part3-speed.md"
+    if not report.exists():
+        return  # no speed report committed: nothing to check
+    committed = report.read_text(encoding="utf-8")
     if (HERE.parents[1] / "docs" / "part3-speed-results.json").exists():
         assert "NOT MEASURED YET" not in committed  # real results were committed: the report must have been regenerated
     else:

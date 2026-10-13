@@ -5,7 +5,7 @@ the caller (and says she is automated and that the call is recorded), answers si
 takes a message (reason, name, callback number), flags emergencies at once, and hands the message to the Part 1
 pipeline. Everything is local and free; calls are simulated (a browser push-to-talk page, or a scripted synthetic caller).
 
-The full brief from the owner is `docs/PART3_PLAN.md`. This file records what was built from it, the decisions
+This file records what was built from the owner's brief, the decisions
 that were taken, and the commands to run it.
 
 Status: see the phase table (section 5). **Numbers that need the laptop's GPU, models or microphone are not in this file
@@ -54,7 +54,7 @@ plan's default, or the most conservative option, was used. **Change any of these
 |---|---|---|---|
 | 1 | Persona and wording | Holly, "the automated assistant of Brightwater Plumbing & Heating". Greeting says she is automated and the call is recorded. All fixed sentences are in `persona.json`. | The plan says the wording is confirmed in Phase 0; the owner's brief gave name and role, the sentences are mine. Edit `persona.json` (a test checks every line is present and speakable). |
 | 2 | FAQ content | 23 invented entries in `faq.json` for the fictional business (Kelmbridge, Unit 4 Mill Lane Trading Estate, 01632 960000 from Ofcom's fictional range, `.example` e-mail and website, villages Wexley Green / Harrowfield / Thornsby Cross / Overmere). Prices, times and policies are exactly the list in the owner's run instructions (copied into section 2.1 below so they can be checked). "Work we do not do" = electrical work, roofing, drain unblocking, gardening (mine). Only the three safety entries carry real UK advice (National Gas Emergency 0800 111 999, 999, stopcock and electrics). | Every price is a fiction; the safety numbers are real. Edit `faq.json`; tests check the facts against the brief. |
-| 3 | Draft definition of done | Kept exactly as drafted in the plan (section 8 of `docs/PART3_PLAN.md`; section 6 below). | Nothing to confirm without the owner. |
+| 3 | Draft definition of done | Kept exactly as drafted in the plan (section 6 below). | Nothing to confirm without the owner. |
 | 4 | GPU check (`nvidia-smi`, `ollama ps`) | Done on the laptop: the RTX 5050 works and Ollama and Whisper run on the GPU (section 8). | |
 | 5 | Git author e-mail | `dan.ukendi1@gmail.com`, as in the existing history and the run instructions. The plan text as pasted had `danukendi1@gmail.com`, which looks like a typo, so the committed plan uses the history's spelling. | If `danukendi1` really was meant, say so: every commit would have to be re-authored. |
 | 6 | Plan mentions an `app/` folder (and `start_app.bat`) | Neither is in the git repository (they may exist untracked on the laptop). The browser page will be built inside `03-phone-receptionist/` (`app.py`, with all logic in `session.py`; both written in Phases 2 and 7). | Move the page into `app/` if that folder exists on the laptop. |
@@ -63,7 +63,7 @@ plan's default, or the most conservative option, was used. **Change any of these
 | 9 | Spelling | When the caller has given a first and last name, Holly asks once for the *full name* to be spelled (unless they already spelled it). A single first name is not spelled. | The two hardest Part 1 names are first names (Siobhan, Wojciech), so spelling only the surname would not help. Costs one turn of the 12. The spelled letters are matched back to the heard name in code (Phase 3). |
 | 10 | Silence rule | "Silent twice" = **two empty turns in a row** (a turn with speech resets the count). | Friendlier; the 12-turn limit bounds the call anyway. |
 | 11 | Calls in `voicemails.db` | Part 1's table has no "source" column and Part 1's `save()` uses positional columns, so it is **not changed**. A call is stored with `source_file = "call-<id>.json"`; `source_file LIKE 'call-%'` finds them. | Conservative: no schema migration of a database the owner already uses. |
-| 12 | Part 1 analysis of a call (confirmed in Phase 4) | `analyze(..., cache_dir=None, prompt_version="call-v1")` on the **caller's side only** (one answer per line). `call-v1` = Part 1's v2 prompt + three sentences saying it is a phone call; added to `shared/analyze.py` as a NEW prompt version (v2/v3 untouched) and its user-message label says "Phone call" instead of "Voicemail transcript". The dialog's own verified name and number replace the model's for those two fields; a call flagged urgent during the call stays urgent. | No cache: its key has no hint fingerprint (HANDOVER 9). |
+| 12 | Part 1 analysis of a call (confirmed in Phase 4) | `analyze(..., cache_dir=None, prompt_version="call-v1")` on the **caller's side only** (one answer per line). `call-v1` = Part 1's v2 prompt + three sentences saying it is a phone call; added to `shared/analyze.py` as a NEW prompt version (v2/v3 untouched) and its user-message label says "Phone call" instead of "Voicemail transcript". The dialog's own verified name and number replace the model's for those two fields; a call flagged urgent during the call stays urgent. | No cache: its key has no hint fingerprint. |
 | 13 | Test cards: dev and score split | Each caller card has `split: dev` or `score`. Prompts and rules may be tuned on `dev` cards only; `evaluate.py` scores `score` cards by default. | Plan lesson: never tune on the cards you score with. |
 | 14 | Streamlit version | `streamlit>=1.40` in `requirements.txt` (`st.audio_input` appeared in 1.39). The laptop has 1.65. | |
 | 15 | Which callers, and what they do | The 18 Part 1 scenarios become calls (same speakers, same labels). The 6 FAQ callers, their questions, all scripted openings and every quirk are mine; see `testset/README.md`. 9 dev cards (c03, c07, c11, c13, c14, c18, f01, f03, f04) cover the core behaviours once (emergency, refused number, robocall, wrong-then-corrected number, spelled name, in-sentence correction, a question, info-only, an unanswerable question); the other 15 are for scoring only. Behaviours only the scoring run sees: a caller who withholds the name or number, an all-in-one opening, a rambling opening, two questions in one turn and a new request after "anything else?". | The plan asked for "4-6 FAQ callers"; replace any card, `cards.py` re-checks the key. |
@@ -183,7 +183,7 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 | 4 | Hand-off to Part 1 | done (run with the real model on the simulated calls) | `handoff.py`, `shared/analyze.py` (`call-v1`) |
 | 5 | Dialog version B (agent) | done (tested with scripted tool calls and run with the real model) | `agent_dialog.py` |
 | 6 | Evaluation | the harness (metrics and the pre-registered A-vs-B rule) is built and tested | `evaluate.py`, `docs/part3-eval-notes.md` |
-| 7 | Polish | built: page wired to the real dialog, docs, HANDOVER section 13 | `app.py`, `session.py`, `docs/HANDOVER.md` §13 |
+| 7 | Polish | built: page wired to the real dialog, docs | `app.py`, `session.py` |
 
 ## 6. Definition of done (draft, kept as in the plan)
 - Synthetic callers: callback number exactly right >= 80 %, name >= 80 %, **0 invented numbers**.
@@ -205,7 +205,7 @@ whose name hit-rate on the `dev` cards is within 1 miss of `small`; pick `qwen2.
 | Agent guardrails (version B) | Part 2 `agent.py` patterns | state message, validated arguments with advice, no-progress stop, trace |
 
 ## 8. Commands
-The commands for running Part 3, in the order they are useful (the same list is summarised in `docs/HANDOVER.md` section 13.4).
+The commands for running Part 3, in the order they are useful.
 
 ```powershell
 # 1. Get the branch and check the machine
