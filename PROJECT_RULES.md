@@ -17,7 +17,7 @@ Reusable code (transcription, schemas, eval helpers) lives in `shared/` so Parts
 - Transcription: `faster-whisper`, default model `small` (compare sizes in Phase 2).
 - Analysis: Ollama, model `qwen2.5:7b`.
 - Pydantic for validation, SQLite for storage, ntfy for notifications, watchdog/polling for the watcher.
-- Repo lives at `C:\Users\danuk\code\audio-to-action`, deliberately **outside OneDrive** so personal data is not synced to the cloud.
+- Repo lives at `C:\path\to\audio-to-action`, deliberately **outside OneDrive** so personal data is not synced to the cloud.
 
 ## Rules for every session
 1. **One phase at a time.** Do only the current phase, then stop and wait for the user to say "next". Never start the next phase on your own.

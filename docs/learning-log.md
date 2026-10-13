@@ -61,7 +61,7 @@ No pipeline code yet.
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 copy .env.example .env
 python scripts\check_setup.py
@@ -146,7 +146,7 @@ text, so the set is reproducible and no audio ever needs to go into git.
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 01-voicemail-triage\testset\generate.py
 start 01-voicemail-triage\testset\audio\05_urgent_noisy_water_heater.wav
@@ -246,7 +246,7 @@ every labelled file, then `name_found()` and `number_found()` compare against `l
 ### 6. Try it yourself
 Open a **new** terminal first (so ffmpeg is on PATH), then:
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python -m shared.transcribe 01-voicemail-triage\testset\audio\06_urgent_landlord_deadline.ogg --cache-dir 01-voicemail-triage\testset\transcripts
 python -m shared.transcribe 01-voicemail-triage\testset\audio\18_other_number_corrected.wav --cache-dir 01-voicemail-triage\testset\transcripts --model large-v3-turbo
@@ -359,7 +359,7 @@ that example), and scam 12 became urgent because its "deadline today" matched th
 ### 6. Try it yourself
 In a new terminal (ffmpeg on PATH), with Ollama running:
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 01-voicemail-triage\analyze_testset.py
 python -m shared.analyze 01-voicemail-triage\testset\audio\06_urgent_landlord_deadline.ogg --transcripts 01-voicemail-triage\testset\transcripts --results 01-voicemail-triage\testset\results
@@ -459,7 +459,7 @@ Your choices: minimal push text, sales → archive, pushes in dry-run mode for n
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 01-voicemail-triage\route_testset.py
 python -m pytest 01-voicemail-triage\tests -v
@@ -567,7 +567,7 @@ and every step is written to `logs/run.log`.
 ### 6. Try it yourself
 In a new terminal (ffmpeg on PATH), Ollama running:
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 copy 01-voicemail-triage\testset\audio\13_other_appointment_confirm.wav 01-voicemail-triage\inbox\
 python 01-voicemail-triage\run.py
@@ -673,7 +673,7 @@ Definition of done: no urgent archived ✔, re-run does nothing ✔, **90 % cate
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 01-voicemail-triage\evaluate.py --configs small:v2 small:v3
 python 01-voicemail-triage\evaluate.py --configs large-v3-turbo:v2 --no-write
@@ -748,7 +748,7 @@ with Task Scheduler), a guide to what Part 2 can reuse from `shared/`, and a tec
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 01-voicemail-triage\digest.py --hours 168 --push
 ```
@@ -839,7 +839,7 @@ Nothing runs yet. The decisions, in the order they shape the work:
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 type 02-meeting-action-agent\README.md
 git check-ignore -v 02-meeting-action-agent\inbox\test.wav
 ```
@@ -932,7 +932,7 @@ the known names (team, customers, streets) as a hint fixed nearly all name error
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 02-meeting-action-agent\testset\generate.py
 start 02-meeting-action-agent\testset\audio\m3_2026-09-21.mp3
@@ -1031,7 +1031,7 @@ and once swapped in a look-alike ("Ellie"). (2) `initial_prompt` fades after ~22
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 02-meeting-action-agent\compare_transcription.py
 python -m shared.transcribe 02-meeting-action-agent\testset\audio\m1_2026-09-07.wav --cache-dir 02-meeting-action-agent\testset\transcripts
@@ -1137,7 +1137,7 @@ the headline was task-only (the DoD needs task + owner) and that the prompt leak
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python -m pytest 02-meeting-action-agent\tests -q
 python 02-meeting-action-agent\extract_testset.py
@@ -1245,7 +1245,7 @@ items both are capped by extraction (perfect links would give only 7/14; correct
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python -m pytest 02-meeting-action-agent\tests -q
 python 02-meeting-action-agent\sync_testset.py --items gold --only m1
@@ -1340,7 +1340,7 @@ crashed the whole run; on Windows, moving a file another program has open copied
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python -m pytest 02-meeting-action-agent\tests -q
 copy 02-meeting-action-agent\testset\audio\m1_2026-09-07.wav 02-meeting-action-agent\inbox\
@@ -1435,7 +1435,7 @@ caught that my decision rule was written after the (instant) rules results were 
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python 02-meeting-action-agent\sync_testset.py --items gold --sync rules
 python 02-meeting-action-agent\evaluate.py
@@ -1498,7 +1498,7 @@ and the Part 3 starting choices recorded in `PROJECT_RULES.md`.
 
 ### 6. Try it yourself
 ```powershell
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 python -m pytest 01-voicemail-triage\tests 02-meeting-action-agent\tests -q
 python 02-meeting-action-agent\evaluate.py

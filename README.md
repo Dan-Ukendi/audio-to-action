@@ -212,8 +212,8 @@ python 01-voicemail-triage\digest.py               # today's digest (saved in di
 ```
 Run it automatically with Windows Task Scheduler (adjust paths; run these yourself):
 ```powershell
-schtasks /Create /TN "Voicemail watcher" /SC ONLOGON /TR "\"C:\Users\danuk\code\audio-to-action\.venv\Scripts\python.exe\" \"C:\Users\danuk\code\audio-to-action\01-voicemail-triage\run.py\" --watch"
-schtasks /Create /TN "Voicemail digest" /SC DAILY /ST 18:00 /TR "\"C:\Users\danuk\code\audio-to-action\.venv\Scripts\python.exe\" \"C:\Users\danuk\code\audio-to-action\01-voicemail-triage\digest.py\" --push"
+schtasks /Create /TN "Voicemail watcher" /SC ONLOGON /TR "\"C:\path\to\audio-to-action\.venv\Scripts\python.exe\" \"C:\path\to\audio-to-action\01-voicemail-triage\run.py\" --watch"
+schtasks /Create /TN "Voicemail digest" /SC DAILY /ST 18:00 /TR "\"C:\path\to\audio-to-action\.venv\Scripts\python.exe\" \"C:\path\to\audio-to-action\01-voicemail-triage\digest.py\" --push"
 ```
 
 ### Part 2 from the command line

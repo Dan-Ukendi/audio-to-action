@@ -209,7 +209,7 @@ The commands for running Part 3, in the order they are useful.
 
 ```powershell
 # 1. Get the branch and check the machine
-cd C:\Users\danuk\code\audio-to-action
+cd C:\path\to\audio-to-action
 .\.venv\Scripts\Activate.ps1
 git pull
 pip install -r requirements.txt                     # installs streamlit too
